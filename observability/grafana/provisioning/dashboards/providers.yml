@@ -1,0 +1,13 @@
+apiVersion: 1
+
+providers:
+  - name: infrapulse
+    orgId: 1
+    folder: InfraPulse
+    type: file
+    disableDeletion: false
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/dashboards
+      foldersFromFilesStructure: false

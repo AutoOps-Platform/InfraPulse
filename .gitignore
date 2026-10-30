@@ -1,0 +1,25 @@
+# Local credentials; keep only the distributable template.
+.env
+.env.*
+!.env.example
+
+# Sensitive or generated backups, never migration source files.
+backups/
+*.dump
+/infrapulse-*.sql
+*.tar
+*.tar.gz
+*.tgz
+
+# Local execution bookkeeping and private agent memory, not deployment input.
+/.superpowers/sdd/
+/.mnemon/
+
+# Private keys and credential containers must never be published.
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+id_rsa
+id_ed25519
