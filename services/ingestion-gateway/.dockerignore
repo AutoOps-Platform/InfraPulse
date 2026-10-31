@@ -1,0 +1,29 @@
+# Never import a host environment or credentials into either build target.
+.venv
+**/.venv
+.env*
+**/.env*
+.git
+**/.git
+__pycache__
+**/__pycache__
+*.py[cod]
+**/*.py[cod]
+.pytest_cache
+**/.pytest_cache
+.mypy_cache
+**/.mypy_cache
+.ruff_cache
+**/.ruff_cache
+.coverage*
+**/.coverage*
+htmlcov
+**/htmlcov
+test-results
+**/test-results
+*.egg-info
+**/*.egg-info
+build
+dist
+*.log
+# Keep app/proto, uv.lock, and all tests/fixtures for the explicit test stage.

@@ -5,11 +5,17 @@
 **Đã chạy nghiệm thu ngày 2026-10-30 sau khi người dùng cho phép chạy container/test: 11 PASS, 2 PARTIAL, 1 FAIL.** Ba service kết thúc ở trạng thái healthy. CI-01 không đạt phần missing-bind trên Docker Desktop/Windows; CI-07/CI-09 đã pass API nhưng chưa kiểm chứng UI browser. Xem [báo cáo và bằng chứng thực thi](<2026-10-30-central-infrastructure-acceptance.md>) và [ma trận §9](<#9-ma-trận-nghiệm-thu-thực-tế>). Các lệnh còn lại là quy trình vận hành, không phải cam kết mọi biến thể đã chạy. Phiên implementation ban đầu không test; quyền runtime được cấp sau đó.
 
 - [Thiết kế đã duyệt](<../superpowers/specs/2026-10-30-central-infrastructure-design.md>) và [kế hoạch sáu task](<../superpowers/plans/2026-10-30-central-infrastructure.md>).
-- [Compose](<../../deploy/compose/compose.yaml>): project `infrapulse`, ba service `prometheus`, `grafana`, `postgres`; không backend, agent, plugin, dashboard nghiệp vụ hoặc lịch backup.
+- Baseline Bước 1 của [Compose](<../../deploy/compose/compose.yaml>): project `infrapulse`, ba service `prometheus`, `grafana`, `postgres`; không backend, agent, plugin, dashboard nghiệp vụ hoặc lịch backup. Bổ sung Gateway hiện tại được tách riêng bên dưới.
 - Grafana/Prometheus chỉ ở `infrapulse_monitoring`; PostgreSQL chỉ ở `infrapulse_database` (`internal: true`). Network monitoring không chặn outbound Internet.
 - Chỉ Grafana publish `127.0.0.1:3000:3000`. Prometheus `9090` và PostgreSQL `5432` không có host binding. Không mở thêm cổng để debug.
 - Grafana dùng SQLite, không phụ thuộc PostgreSQL. Network không bảo vệ secrets trước người có quyền host/Docker.
 - HTTP loopback không TLS chỉ là ngoại lệ lab; không dùng cấu hình này làm public/LAN ingress.
+
+### Bổ sung Bước 2 (2026-10-31), không sửa kết quả lịch sử
+
+Stack hiện tại có thêm service `ingest` trên monitoring, publish riêng `127.0.0.1:8000`; xem [runbook Gateway](<ingestion-gateway.md>) và [nghiệm thu GW-01–GW-15](<ingestion-gateway-acceptance.md>). Ba service/volume Bước 1 và kết quả CI-01–CI-14 ở §9 vẫn là baseline ngày 2026-10-30, không được suy rộng thành nghiệm thu mới. Các thao tác kiểm tra baseline bên dưới chọn rõ ba service; lệnh `down`/startup toàn stack ảnh hưởng cả Gateway và chỉ dùng khi operator chủ ý cho phép.
+
+**Plan CLI erratum (đã tái hiện ở Task 7):** root Compose phải dùng `--env-file .env -f deploy/compose/compose.yaml` và **không** `--project-directory .`. Override sai đó đổi anchor, đưa `../../services` và `../../observability` ra ngoài repo; config syntax quiet thành công vẫn không chứng minh resolved paths đúng. Giữ YAML `../../...`, project `infrapulse`, networks và volumes; không sửa báo cáo nghiệm thu lịch sử để che lỗi kế hoạch.
 
 ## 2. Prerequisites và input
 
@@ -40,6 +46,7 @@ Dùng cùng root, env-file và project ở mọi lần thao tác. Không đặt 
 if ($PSVersionTable.PSVersion -lt [version]'7.3') { throw 'Use supported PowerShell 7.3+ (pwsh), not Windows PowerShell 5.1.' }
 $PSNativeCommandArgumentPassing = 'Standard'
 $dc = @('--env-file', '.env', '-f', 'deploy/compose/compose.yaml')
+$baselineServices = @('prometheus', 'grafana', 'postgres')
 function Assert-NativeExit {
     param([string]$Action)
     if ($LASTEXITCODE -ne 0) { throw "$Action failed (exit $LASTEXITCODE)." }
@@ -82,7 +89,7 @@ foreach ($dir in @('observability/grafana/provisioning', 'observability/grafana/
 }
 docker compose @dc config --quiet
 Assert-NativeExit 'Compose configuration'
-docker compose @dc pull
+docker compose @dc pull @baselineServices
 Assert-NativeExit 'Pull pinned images'
 docker compose @dc run --rm --no-deps --entrypoint sh prometheus -c 'command -v wget && command -v promtool'
 Assert-NativeExit 'Prometheus tooling'
@@ -92,9 +99,9 @@ docker compose @dc run --rm --no-deps --entrypoint sh postgres -c 'command -v pg
 Assert-NativeExit 'PostgreSQL tooling'
 docker compose @dc run --rm --no-deps --entrypoint promtool prometheus check config /etc/prometheus/prometheus.yml
 Assert-NativeExit 'Prometheus configuration'
-docker compose @dc up -d --wait --wait-timeout 180
+docker compose @dc up -d --wait --wait-timeout 180 @baselineServices
 Assert-NativeExit 'Stack startup'
-docker compose @dc ps
+docker compose @dc ps @baselineServices
 Assert-NativeExit 'Stack status'
 ```
 
@@ -111,7 +118,7 @@ Input/literal/precedence/tag đã PASS với fixture giả; missing-bind native 
 ### 4.1. Inspect có chọn lọc
 
 ```powershell
-$ids = @(docker compose @dc ps -q)
+$ids = @(docker compose @dc ps -q @baselineServices)
 Assert-NativeExit 'Get container IDs'
 if ($ids.Count -ne 3) { throw 'Expected exactly three running services.' }
 foreach ($id in $ids) {
@@ -294,14 +301,16 @@ if ($sample.status -ne 'success' -or @($sample.data.result).Count -ne 1) {
     throw 'Expected exactly one successful self-scrape series.'
 }
 $sampleTs = [string]$sample.data.result[0].value[1]
-$beforeIds = @(docker compose @dc ps -q)
+$beforeIds = @(docker compose @dc ps -q @baselineServices)
 Assert-NativeExit 'Record original container IDs'
 # Privately record the non-secret $sampleTs and dashboard UID for recovery.
+# Whole-stack recreate also stops Gateway now; only with separate authorization.
 docker compose @dc down
 Assert-NativeExit 'Recreate: down without deleting volumes'
+# Restore the current four-service stack (Gateway must already have a reviewed build).
 docker compose @dc up -d --wait --wait-timeout 180
 Assert-NativeExit 'Recreate: startup'
-$afterIds = @(docker compose @dc ps -q)
+$afterIds = @(docker compose @dc ps -q @baselineServices)
 Assert-NativeExit 'Read replacement container IDs'
 $oldQuery = "http://127.0.0.1:9090/api/v1/query?query=up%7Bjob%3D%22prometheus%22%7D&time=$sampleTs"
 $raw = docker compose @dc exec -T prometheus wget -q -O - $oldQuery

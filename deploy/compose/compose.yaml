@@ -105,6 +105,60 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  ingest:
+    build:
+      context: ../../services/ingestion-gateway
+    ports:
+      - "127.0.0.1:${INGEST_HOST_PORT:-8000}:8000"
+    networks:
+      - monitoring
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    # Deliberate allowlist: never inject the root dotenv or database credentials.
+    environment:
+      INGEST_PROMETHEUS_WRITE_URL: ${INGEST_PROMETHEUS_WRITE_URL:-http://prometheus:9090/api/v1/write}
+      INGEST_PROMETHEUS_READY_URL: ${INGEST_PROMETHEUS_READY_URL:-http://prometheus:9090/-/ready}
+      INGEST_MAX_COMPRESSED_BYTES: ${INGEST_MAX_COMPRESSED_BYTES:-1048576}
+      INGEST_MAX_DECOMPRESSED_BYTES: ${INGEST_MAX_DECOMPRESSED_BYTES:-8388608}
+      INGEST_MAX_SERIES: ${INGEST_MAX_SERIES:-5000}
+      INGEST_MAX_SAMPLES: ${INGEST_MAX_SAMPLES:-20000}
+      INGEST_MAX_LABELS_PER_SERIES: ${INGEST_MAX_LABELS_PER_SERIES:-64}
+      INGEST_MAX_INFLIGHT: ${INGEST_MAX_INFLIGHT:-2}
+      INGEST_RATE_PER_SECOND: ${INGEST_RATE_PER_SECOND:-10}
+      INGEST_RATE_BURST: ${INGEST_RATE_BURST:-20}
+      INGEST_MAX_SAMPLE_AGE_SECONDS: ${INGEST_MAX_SAMPLE_AGE_SECONDS:-3600}
+      INGEST_MAX_FUTURE_SKEW_SECONDS: ${INGEST_MAX_FUTURE_SKEW_SECONDS:-120}
+      INGEST_BODY_READ_TIMEOUT_SECONDS: ${INGEST_BODY_READ_TIMEOUT_SECONDS:-5}
+      INGEST_CONNECT_TIMEOUT_SECONDS: ${INGEST_CONNECT_TIMEOUT_SECONDS:-2}
+      INGEST_READ_TIMEOUT_SECONDS: ${INGEST_READ_TIMEOUT_SECONDS:-10}
+      INGEST_WRITE_TIMEOUT_SECONDS: ${INGEST_WRITE_TIMEOUT_SECONDS:-10}
+      INGEST_POOL_TIMEOUT_SECONDS: ${INGEST_POOL_TIMEOUT_SECONDS:-1}
+      INGEST_UPSTREAM_DEADLINE_SECONDS: ${INGEST_UPSTREAM_DEADLINE_SECONDS:-12}
+      INGEST_READY_TIMEOUT_SECONDS: ${INGEST_READY_TIMEOUT_SECONDS:-1}
+      INGEST_LOG_LEVEL: ${INGEST_LOG_LEVEL:-INFO}
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    pids_limit: 128
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=2).close()"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 networks:
   monitoring:
     driver: bridge

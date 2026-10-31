@@ -23,3 +23,11 @@ backups/
 *.keystore
 id_rsa
 id_ed25519
+
+# Local Python environments and test artifacts; keep lockfiles and test sources.
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage*
+htmlcov/

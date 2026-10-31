@@ -6,7 +6,9 @@
 
 Đã tạo [environment riêng](<.env>) với hai password ngẫu nhiên độc lập và ACL hạn chế; không hiển thị credential. SQL backup/isolated restore đã pass; dữ liệu thử đã dọn, ba volume thật và backup host được giữ. Credential, backup và artifact chạy thử không được đưa vào Git.
 
-Bước này chỉ có Prometheus, Grafana và PostgreSQL. Chưa triển khai Telegraf, FastAPI Ingestion Gateway, NestJS, AIOps, dashboard nghiệp vụ, alert hay Remote Write E2E.
+Baseline Bước 1 ở trên chỉ có Prometheus, Grafana và PostgreSQL; kết quả lịch sử được giữ nguyên. **Bước 2 đã thêm FastAPI Ingestion Gateway** (service `ingest`, HTTP lab loopback `127.0.0.1:8000`, một worker); xem [runbook Gateway](<docs/deployment/ingestion-gateway.md>) và [nghiệm thu GW-01–GW-15](<docs/deployment/ingestion-gateway-acceptance.md>) để biết kết quả thực tế. Bearer/IDs chỉ kiểm tra hình thức/tự khai báo, **không phải xác thực key hoặc chống spoof**. Chưa có TLS/LAN/Telegraf VM, NestJS, AIOps, dashboard nghiệp vụ hay alert.
+
+Nghiệm thu Bước 2 ngày 2026-10-31: **Windows593 / Linux568 unit+integration PASS; E2E5 PASS**, Gateway scrapeup1; controller đã thấy fixture42.25 và hai IDs trong Grafana Explore; native-host IPv4 probe bị từ chối trong khi loopback200. **GW-01–GW-15: 15 PASS trong phạm vi lab**, không phải production readiness; [kết quả và giới hạn](<docs/deployment/ingestion-gateway-acceptance.md>).
 
 ## Kiến trúc lab
 
@@ -15,20 +17,21 @@ Bước này chỉ có Prometheus, Grafana và PostgreSQL. Chưa triển khai Te
 | Prometheus | `prom/prometheus:v3.13.5-busybox` | `monitoring` | Không | `prometheus_data` → `/prometheus` |
 | Grafana | `grafana/grafana:13.3.0` | `monitoring` | `127.0.0.1:3000` | `grafana_data` → `/var/lib/grafana` |
 | PostgreSQL | `postgres:18.6-bookworm` | `database`, internal | Không | `postgres_data` → `/var/lib/postgresql` |
+| Ingestion Gateway | Python `3.12.16-slim-bookworm` + digest, uv `0.13.6` (frozen build) | `monitoring` | `127.0.0.1:8000` | Không |
 
 Project `infrapulse`; PostgreSQL 18 dùng `PGDATA=/var/lib/postgresql/18/docker`. Grafana dùng SQLite, không phụ thuộc PostgreSQL; datasource tự provision UID `infrapulse-prometheus`. Prometheus tự scrape mỗi `30s`, bật receiver nội bộ, retention `7d`/`5GB` (không phải quota cứng hoặc bảo đảm luôn đủ bảy ngày). Không publish `9090`/`5432`.
 
 ## Prerequisites
 
 - Windows, Docker Desktop đang chạy WSL2 backend / Linux containers; Docker Compose v2 hỗ trợ `up --wait` và long-syntax bind mounts.
-- Đủ RAM/disk Docker Desktop/VHDX, có headroom ngoài retention; host port 3000 chưa bị chiếm khi khởi động lần đầu.
+- Đủ RAM/disk Docker Desktop/VHDX, có headroom ngoài retention; host ports 3000 và 8000 (hoặc port Gateway đã cấu hình) chưa bị chiếm khi khởi động lần đầu.
 - PowerShell 7.3+ (`pwsh`, bản còn được hỗ trợ) tại root workspace, native argument passing `Standard`; không hỗ trợ Windows PowerShell 5.1/Legacy vì có thể làm mất quote trong Docker Go template/shell argument. Không trộn đường dẫn WSL và Windows.
 - Khi cài lần đầu, operator tạo [environment riêng](<.env>) từ [mẫu environment](<.env.example>), thay cả hai password mạnh/khác nhau, bảo vệ quyền đọc và không commit/share. Single-quote giá trị để giữ literal `$`/`#`; shell environment có precedence cao hơn env-file. Máy này đã có credential: không copy đè.
 - Tag/tooling đã recheck bằng runtime; Docker 29.1.3, Compose 2.40.3-desktop.1, PowerShell 7.6.9. Đọc preflight/tooling trong [runbook](<docs/deployment/central-infrastructure.md>) trước vận hành.
 
 ## Quick Start — cài mới khi được phép vận hành
 
-Máy hiện tại đã chạy stack: không chạy lại bước copy environment. Với cài mới, điền và bảo vệ credential trước khi chạy lệnh Docker. Khối lệnh hướng dẫn không tự thay thế bằng chứng nghiệm thu.
+Máy hiện tại đã chạy bốn service: không chạy lại bước copy environment. Với cài mới, điền và bảo vệ credential trước khi chạy lệnh Docker. Khối lệnh hướng dẫn không tự thay thế bằng chứng nghiệm thu. **CLI erratum:** chạy ở root với `--env-file .env -f deploy/compose/compose.yaml`, không thêm `--project-directory .`; override đó đã tái hiện context/bind resolve ra ngoài repo. Giữ nguyên các đường dẫn YAML `../../...`, project và volumes; xem [giải thích](<docs/deployment/ingestion-gateway.md#canonical-compose-commands--approved-plan-erratum>).
 
 ```powershell
 if ($PSVersionTable.PSVersion -lt [version]'7.3') { throw 'Use supported PowerShell 7.3+ (pwsh), not Windows PowerShell 5.1.' }
@@ -52,8 +55,10 @@ foreach ($dir in @('observability/grafana/provisioning', 'observability/grafana/
 }
 docker compose @dc config --quiet
 Assert-NativeExit 'Compose configuration'
-docker compose @dc pull
-Assert-NativeExit 'Pull pinned images'
+docker compose @dc pull prometheus grafana postgres
+Assert-NativeExit 'Pull pinned Step 1 images'
+docker compose @dc build ingest
+Assert-NativeExit 'Build pinned Gateway'
 # Check image tooling as described in the runbook before continuing.
 docker compose @dc run --rm --no-deps --entrypoint promtool prometheus check config /etc/prometheus/prometheus.yml
 Assert-NativeExit 'Prometheus configuration'
@@ -72,7 +77,8 @@ Dừng bằng `docker compose @dc down`, kiểm tra exit code; khởi động l�
 ## File chính và tài liệu
 
 - [Compose](<deploy/compose/compose.yaml>) — topology, mounts, health, logging và restart.
-- [Prometheus config](<observability/prometheus/prometheus.yml>) — self-scrape.
+- [Prometheus config](<observability/prometheus/prometheus.yml>) — self-scrape và scrape Gateway.
+- [Runbook Gateway](<docs/deployment/ingestion-gateway.md>) và [nghiệm thu Gateway](<docs/deployment/ingestion-gateway-acceptance.md>) — dev/codegen, sender, E2E, UI/native isolation, retry/logging và giới hạn lab.
 - [Grafana datasource](<observability/grafana/provisioning/datasources/prometheus.yml>) và [dashboard provider](<observability/grafana/provisioning/dashboards/providers.yml>).
 - [Dashboard placeholder](<observability/grafana/dashboards/.gitkeep>) — chưa có dashboard JSON triển khai sẵn; dashboard thử đã dọn.
 - [Runbook và ma trận CI-01–CI-14](<docs/deployment/central-infrastructure.md>) — startup, auth, failure recovery, persistence, backup/restore, troubleshooting.
