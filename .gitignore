@@ -31,3 +31,17 @@ __pycache__/
 .pytest_cache/
 .coverage*
 htmlcov/
+
+# Local Node builds/tests and private deployment mounts; retain lockfiles.
+node_modules/
+dist/
+generated/
+coverage/
+.vite/
+*.tsbuildinfo
+test-results/
+/deploy/secrets/
+/services/management-backend/secrets/
+/services/management-backend/private/
+
+node_modules

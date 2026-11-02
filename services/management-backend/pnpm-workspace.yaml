@@ -1,0 +1,9 @@
+overrides:
+  '@prisma/adapter-pg@7.10.1>@types/pg': '8.16.0'
+packages:
+  - '.'
+allowBuilds:
+  '@swc/core@1.16.21': true
+  '@prisma/engines@7.10.1': true
+  'prisma@7.10.1': true
+  '@scarf/scarf@1.4.0': false

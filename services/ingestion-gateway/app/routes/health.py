@@ -32,6 +32,10 @@ async def ready(request: Request) -> Response:
                 status = 200 if response.status_code == 200 else 503
             finally:
                 await response.aclose()
+            if status == 200:
+                credential_health = await request.app.state.management_ready.request(
+                    'GET', '/internal/v1/credentials/health')
+                status = 200 if credential_health.status_code == 204 else 503
         return Response(status_code=status)
     except Exception:
         # Includes total/HTTPX timeouts and malformed redirect locations. No

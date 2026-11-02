@@ -6,9 +6,11 @@
 
 Đã tạo [environment riêng](<.env>) với hai password ngẫu nhiên độc lập và ACL hạn chế; không hiển thị credential. SQL backup/isolated restore đã pass; dữ liệu thử đã dọn, ba volume thật và backup host được giữ. Credential, backup và artifact chạy thử không được đưa vào Git.
 
-Baseline Bước 1 ở trên chỉ có Prometheus, Grafana và PostgreSQL; kết quả lịch sử được giữ nguyên. **Bước 2 đã thêm FastAPI Ingestion Gateway** (service `ingest`, HTTP lab loopback `127.0.0.1:8000`, một worker); xem [runbook Gateway](<docs/deployment/ingestion-gateway.md>) và [nghiệm thu GW-01–GW-15](<docs/deployment/ingestion-gateway-acceptance.md>) để biết kết quả thực tế. Bearer/IDs chỉ kiểm tra hình thức/tự khai báo, **không phải xác thực key hoặc chống spoof**. Chưa có TLS/LAN/Telegraf VM, NestJS, AIOps, dashboard nghiệp vụ hay alert.
+Baseline Bước 1 ở trên chỉ có Prometheus, Grafana và PostgreSQL; kết quả lịch sử được giữ nguyên. **Bước 2 đã thêm FastAPI Ingestion Gateway** (service `ingest`, HTTP lab loopback `127.0.0.1:8000`, một worker); xem [runbook Gateway](<docs/deployment/ingestion-gateway.md>) và [nghiệm thu GW-01–GW-15](<docs/deployment/ingestion-gateway-acceptance.md>) để biết kết quả thực tế. Baseline Bước2 này chỉ kiểm tra hình thức Bearer/IDs tự khai báo, **không phải xác thực key hoặc chống spoof**. Đây là kết quả lịch sử của shared stack, không mô tả code Bước3 bên dưới. Chưa có TLS/LAN/Telegraf VM, AIOps, dashboard nghiệp vụ hay alert.
 
 Nghiệm thu Bước 2 ngày 2026-10-31: **Windows593 / Linux568 unit+integration PASS; E2E5 PASS**, Gateway scrapeup1; controller đã thấy fixture42.25 và hai IDs trong Grafana Explore; native-host IPv4 probe bị từ chối trong khi loopback200. **GW-01–GW-15: 15 PASS trong phạm vi lab**, không phải production readiness; [kết quả và giới hạn](<docs/deployment/ingestion-gateway-acceptance.md>).
+
+**Bước3 — Management backend:** code/tests dùng NestJS→primary PostgreSQL, scoped Agent credentials, Gateway verification/status reporter và profiles/provisioning; xem [nghiệm thu MB-01–MB-17 và giới hạn](<docs/deployment/management-backend-acceptance.md>), [Gate T12/rollback](<docs/deployment/management-backend.md>), [hợp đồng Step4](<docs/contracts/agent-provisioning.md>) và [hợp đồng Step6](<docs/contracts/grafana-management-api.md>). Task13 chỉ dùng isolated tmpfs stack với test trust riêng, **không triển khai/migrate/restart shared bốn service**, không chứng minh Grafana login/installer/VM/production. Không nâng FAIL/PARTIAL lịch sử thành PASS.
 
 ## Kiến trúc lab
 
@@ -31,7 +33,7 @@ Project `infrapulse`; PostgreSQL 18 dùng `PGDATA=/var/lib/postgresql/18/docker`
 
 ## Quick Start — cài mới khi được phép vận hành
 
-Máy hiện tại đã chạy bốn service: không chạy lại bước copy environment. Với cài mới, điền và bảo vệ credential trước khi chạy lệnh Docker. Khối lệnh hướng dẫn không tự thay thế bằng chứng nghiệm thu. **CLI erratum:** chạy ở root với `--env-file .env -f deploy/compose/compose.yaml`, không thêm `--project-directory .`; override đó đã tái hiện context/bind resolve ra ngoài repo. Giữ nguyên các đường dẫn YAML `../../...`, project và volumes; xem [giải thích](<docs/deployment/ingestion-gateway.md#canonical-compose-commands--approved-plan-erratum>).
+Máy hiện tại đã chạy bốn service: không chạy lại bước copy environment. Khối Quick Start Bước1/2 dưới đây là lịch sử cài mới, **không còn là toàn bộ preflight cho code Bước3**: operator phải hoàn thành [Gate T12](<docs/deployment/management-backend.md>) và được cho phép riêng trước mọi bootstrap/migration/start Management hoặc cold-restart Gateway. Task13 không chạy khối lệnh shared này. Với cài mới, điền và bảo vệ credential trước khi chạy lệnh Docker. Khối lệnh hướng dẫn không tự thay thế bằng chứng nghiệm thu. **CLI erratum:** chạy ở root với `--env-file .env -f deploy/compose/compose.yaml`, không thêm `--project-directory .`; override đó đã tái hiện context/bind resolve ra ngoài repo. Giữ nguyên các đường dẫn YAML `../../...`, project và volumes; xem [giải thích](<docs/deployment/ingestion-gateway.md#canonical-compose-commands--approved-plan-erratum>).
 
 ```powershell
 if ($PSVersionTable.PSVersion -lt [version]'7.3') { throw 'Use supported PowerShell 7.3+ (pwsh), not Windows PowerShell 5.1.' }

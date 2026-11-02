@@ -12,7 +12,8 @@ import os
 from pathlib import Path
 from random import uniform
 from time import monotonic, time
-from uuid import uuid4
+from uuid import UUID, uuid4
+import re
 
 import cramjam
 import httpx
@@ -108,10 +109,21 @@ async def query_until(
 
 @pytest.fixture
 def protocol_headers():
-    # Generated in memory, not passed through CLI/URLs/environment or printed.
+    # The parent isolated fixture issues this real credential over signed Admin
+    # HTTP. Only a private file PATH is passed through the environment/argv.
+    # Never print file contents or credential-bearing assertion diagnostics.
+    try:
+        fixture = json.loads(Path(os.environ['E2E_CREDENTIAL_FILE']).read_text(encoding='utf-8'))
+        key, server, agent = fixture['api_key'], fixture['server_id'], fixture['agent_id']
+        if (not isinstance(key, str) or re.fullmatch(r'[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}', key) is None
+                or str(UUID(key.split('.')[0])) != key.split('.')[0]
+                or str(UUID(server)) != server or str(UUID(agent)) != agent):
+            raise ValueError()
+    except Exception:
+        raise RuntimeError('A valid parent-issued private E2E credential fixture is required') from None
     return {
-        "Authorization": "Bearer lab-only-" + uuid4().hex,
-        "X-Server-ID": "srv-e2e", "X-Agent-ID": "agent-e2e",
+        "Authorization": "Bearer " + key,
+        "X-Server-ID": server, "X-Agent-ID": agent,
         "Content-Type": "application/x-protobuf", "Content-Encoding": "snappy",
         "X-Prometheus-Remote-Write-Version": "0.1.0",
         "User-Agent": "infrapulse-e2e/0.1.0",
@@ -130,13 +142,13 @@ async def clients(require_opt_in):
         yield gateway, prometheus
 
 
-def _payload(run_id: str, value: float, timestamp_ms: int, *, identity: str) -> bytes:
+def _payload(run_id: str, value: float, timestamp_ms: int, *, identity: str, ids: dict[str, str]) -> bytes:
     message = WriteRequest()
     series = message.timeseries.add()
     labels = [("__name__", "infrapulse_e2e_value"), ("run_id", run_id)]
     if identity != "missing":
-        labels += [("server_id", "wrong-server" if identity == "conflict" else "srv-e2e"),
-                   ("agent_id", "agent-e2e")]
+        labels += [("server_id", str(uuid4()) if identity == "conflict" else ids['X-Server-ID']),
+                   ("agent_id", ids['X-Agent-ID'])]
     for name, value_text in sorted(labels):
         series.labels.add(name=name, value=value_text)
     series.samples.add(value=value, timestamp=timestamp_ms)
@@ -147,19 +159,19 @@ def _query(run_id: str) -> str:
     return 'infrapulse_e2e_value{run_id="' + run_id + '"}'
 
 
-async def _assert_visible(prometheus, run_id, value, timestamp_ms, case):
+async def _assert_visible(prometheus, run_id, value, timestamp_ms, case, ids):
     result = await query_until(prometheus, _query(run_id))
     assert len(result) == 1
     labels = result[0]["metric"]
     assert labels == {"__name__": "infrapulse_e2e_value", "run_id": run_id,
-                      "server_id": "srv-e2e", "agent_id": "agent-e2e"}
+                      "server_id": ids['X-Server-ID'], "agent_id": ids['X-Agent-ID']}
     assert float(result[0]["value"][1]) == value
     # Instant-vector value[0] is evaluation time, not the stored sample timestamp.
     timestamp_result = await query_until(prometheus, "timestamp(" + _query(run_id) + ")")
     assert len(timestamp_result) == 1
     assert float(timestamp_result[0]["value"][1]) == pytest.approx(timestamp_ms / 1000, abs=0.0001, rel=0)
     print(json.dumps({"event": "E2E_VISIBLE", "case": case, "run_id": run_id,
-                      "value": value, "server_id": "srv-e2e", "agent_id": "agent-e2e",
+                      "value": value, "server_id": ids['X-Server-ID'], "agent_id": ids['X-Agent-ID'],
                       "sample_timestamp_ms": timestamp_ms,
                       "observed_at": datetime.now(timezone.utc).isoformat()}), flush=True)
 
@@ -179,29 +191,30 @@ async def test_scalar_fixture_is_wire_compatible(clients, protocol_headers):
     gateway, prometheus = clients
     result = await send_with_retry(gateway, bytes(cramjam.snappy.compress_raw(message.SerializeToString())), protocol_headers)
     assert result.status_code == 204
-    await _assert_visible(prometheus, run_id, 1.0, timestamp_ms, "independent_wire")
+    await _assert_visible(prometheus, run_id, 1.0, timestamp_ms, "independent_wire", protocol_headers)
 
 
 async def test_missing_identity_labels_visible(clients, protocol_headers):
     run_id, timestamp_ms = str(uuid4()), int(time() * 1000)
     gateway, prometheus = clients
-    response = await send_with_retry(gateway, _payload(run_id, 42.25, timestamp_ms, identity="missing"), protocol_headers)
+    without_claims = {key: value for key, value in protocol_headers.items() if key not in {'X-Server-ID', 'X-Agent-ID'}}
+    response = await send_with_retry(gateway, _payload(run_id, 42.25, timestamp_ms, identity="missing", ids=protocol_headers), without_claims)
     assert response.status_code == 204
-    await _assert_visible(prometheus, run_id, 42.25, timestamp_ms, "missing_ids")
+    await _assert_visible(prometheus, run_id, 42.25, timestamp_ms, "missing_ids", protocol_headers)
 
 
 async def test_matching_labels_visible(clients, protocol_headers):
     run_id, timestamp_ms = str(uuid4()), int(time() * 1000)
     gateway, prometheus = clients
-    response = await send_with_retry(gateway, _payload(run_id, 43.25, timestamp_ms, identity="matching"), protocol_headers)
+    response = await send_with_retry(gateway, _payload(run_id, 43.25, timestamp_ms, identity="matching", ids=protocol_headers), protocol_headers)
     assert response.status_code == 204
-    await _assert_visible(prometheus, run_id, 43.25, timestamp_ms, "matching_ids")
+    await _assert_visible(prometheus, run_id, 43.25, timestamp_ms, "matching_ids", protocol_headers)
 
 
 async def test_conflict_is_not_written(clients, protocol_headers):
     run_id, timestamp_ms = str(uuid4()), int(time() * 1000)
     gateway, prometheus = clients
-    response = await send_with_retry(gateway, _payload(run_id, 99.0, timestamp_ms, identity="conflict"), protocol_headers)
+    response = await send_with_retry(gateway, _payload(run_id, 99.0, timestamp_ms, identity="conflict", ids=protocol_headers), protocol_headers)
     assert response.status_code == 400
     assert await query_until(prometheus, _query(run_id), expect_present=False) == []
     print(json.dumps({"event": "E2E_REJECTED", "run_id": run_id, "value": 99.0,

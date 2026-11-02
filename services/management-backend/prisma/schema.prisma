@@ -1,0 +1,240 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["management"]
+}
+
+model Server {
+  id          String              @id @db.Uuid
+  name        String              @db.VarChar(128)
+  os          String              @db.VarChar(16)
+  environment String              @db.VarChar(128)
+  metadata    Json                @default("{}") @db.JsonB
+  created_at  DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime            @default(now()) @db.Timestamptz(6)
+  archived_at DateTime?           @db.Timestamptz(6)
+  agents      Agent[]
+  memberships ServerGroupMember[]
+  profile     ServerProfile?
+
+  @@index([archived_at, created_at, id], map: "servers_archive_created_id_idx")
+  @@index([environment, os], map: "servers_environment_os_idx")
+  @@map("servers")
+  @@schema("management")
+}
+
+model ServerGroup {
+  id          String              @id @db.Uuid
+  name        String              @db.VarChar(128)
+  slug        String              @unique(map: "server_groups_slug_key") @db.VarChar(128)
+  created_at  DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime            @default(now()) @db.Timestamptz(6)
+  memberships ServerGroupMember[]
+
+  @@map("server_groups")
+  @@schema("management")
+}
+
+model ServerGroupMember {
+  server_id String      @db.Uuid
+  group_id  String      @db.Uuid
+  server    Server      @relation(fields: [server_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "server_group_members_server_fk")
+  group     ServerGroup @relation(fields: [group_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "server_group_members_group_fk")
+
+  @@id([server_id, group_id])
+  @@index([group_id], map: "server_group_members_group_idx")
+  @@map("server_group_members")
+  @@schema("management")
+}
+
+model Agent {
+  id                              String                     @id @db.Uuid
+  server_id                       String                     @db.Uuid
+  os_at_registration              String                     @db.VarChar(16)
+  agent_type                      String                     @default("telegraf") @db.VarChar(16)
+  version                         String?                    @db.VarChar(128)
+  version_source                  String?                    @db.VarChar(32)
+  version_reported_at             DateTime?                  @db.Timestamptz(6)
+  lifecycle                       String                     @default("active") @db.VarChar(16)
+  registered_at                   DateTime                   @default(now()) @db.Timestamptz(6)
+  retired_at                      DateTime?                  @db.Timestamptz(6)
+  created_at                      DateTime                   @default(now()) @db.Timestamptz(6)
+  updated_at                      DateTime                   @default(now()) @db.Timestamptz(6)
+  last_metric_seen_at             DateTime?                  @db.Timestamptz(6)
+  last_applied_profile_version_id String?                    @db.Uuid
+  last_applied_at                 DateTime?                  @db.Timestamptz(6)
+  last_config_report_result       String?                    @db.VarChar(16)
+  last_config_report_at           DateTime?                  @db.Timestamptz(6)
+  server                          Server                     @relation(fields: [server_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "agents_server_fk")
+  last_applied_profile_version    ProfileVersion?            @relation(fields: [last_applied_profile_version_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "agents_applied_version_fk")
+  credentials                     ApiCredential[]
+  receipts                        AgentProvisioningReceipt[]
+
+  @@index([server_id, lifecycle], map: "agents_server_lifecycle_idx")
+  @@index([last_applied_profile_version_id], map: "agents_applied_version_idx")
+  @@map("agents")
+  @@schema("management")
+}
+
+model ApiCredential {
+  id                  String         @id @db.Uuid
+  agent_id            String         @db.Uuid
+  public_prefix       String         @db.VarChar(64)
+  secret_hash         Bytes          @db.ByteA
+  scopes              String[]
+  expires_at          DateTime       @db.Timestamptz(6)
+  revoked_at          DateTime?      @db.Timestamptz(6)
+  retire_at           DateTime?      @db.Timestamptz(6)
+  rotated_from_id     String?        @unique(map: "api_credentials_rotated_from_key") @db.Uuid
+  issuance_request_id String         @unique(map: "api_credentials_issuance_request_key") @db.Uuid
+  created_by          Json           @db.JsonB
+  created_at          DateTime       @default(now()) @db.Timestamptz(6)
+  agent               Agent          @relation(fields: [agent_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "api_credentials_agent_fk")
+  rotated_from        ApiCredential? @relation("rotation", fields: [rotated_from_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "api_credentials_rotated_from_fk")
+  successor           ApiCredential? @relation("rotation")
+
+  @@unique([id, agent_id], map: "api_credentials_id_agent_key")
+  @@index([agent_id, created_at], map: "api_credentials_agent_created_idx")
+  @@index([expires_at, retire_at, revoked_at], map: "api_credentials_expiry_retire_revoke_idx")
+  @@map("api_credentials")
+  @@schema("management")
+}
+
+model MonitoringProfile {
+  id          String           @id @db.Uuid
+  slug        String           @unique(map: "monitoring_profiles_slug_key") @db.VarChar(128)
+  name        String           @db.VarChar(128)
+  description String           @db.VarChar(512)
+  os          String           @db.VarChar(16)
+  retired_at  DateTime?        @db.Timestamptz(6)
+  created_at  DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime         @default(now()) @db.Timestamptz(6)
+  versions    ProfileVersion[]
+
+  @@map("monitoring_profiles")
+  @@schema("management")
+}
+
+model ProfileVersion {
+  id           String                     @id @db.Uuid
+  profile_id   String                     @db.Uuid
+  version      Int
+  config       Json                       @db.JsonB
+  checksum     String                     @db.Char(64)
+  status       String                     @default("draft") @db.VarChar(16)
+  created_by   Json                       @db.JsonB
+  created_at   DateTime                   @default(now()) @db.Timestamptz(6)
+  published_at DateTime?                  @db.Timestamptz(6)
+  profile      MonitoringProfile          @relation(fields: [profile_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "profile_versions_profile_fk")
+  assignments  ServerProfile[]
+  agents       Agent[]
+  receipts     AgentProvisioningReceipt[]
+
+  @@unique([profile_id, version], map: "profile_versions_profile_version_key")
+  @@map("profile_versions")
+  @@schema("management")
+}
+
+model ServerProfile {
+  server_id          String         @id @db.Uuid
+  profile_version_id String         @db.Uuid
+  assigned_by        Json           @db.JsonB
+  assigned_at        DateTime       @default(now()) @db.Timestamptz(6)
+  server             Server         @relation(fields: [server_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "server_profiles_server_fk")
+  profile_version    ProfileVersion @relation(fields: [profile_version_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "server_profiles_version_fk")
+
+  @@index([profile_version_id], map: "server_profiles_version_idx")
+  @@map("server_profiles")
+  @@schema("management")
+}
+
+model AgentProvisioningReceipt {
+  agent_id             String         @db.Uuid
+  profile_version_id   String         @db.Uuid
+  checksum             String         @db.Char(64)
+  first_provisioned_at DateTime       @default(now()) @db.Timestamptz(6)
+  last_provisioned_at  DateTime       @default(now()) @db.Timestamptz(6)
+  agent                Agent          @relation(fields: [agent_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "agent_provisioning_receipts_agent_fk")
+  profile_version      ProfileVersion @relation(fields: [profile_version_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "agent_provisioning_receipts_version_fk")
+
+  @@id([agent_id, profile_version_id])
+  @@index([profile_version_id], map: "agent_provisioning_receipts_version_idx")
+  @@map("agent_provisioning_receipts")
+  @@schema("management")
+}
+
+model AuditLog {
+  id            String   @id @db.Uuid
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  actor_kind    String   @db.VarChar(16)
+  actor_issuer  String   @db.VarChar(128)
+  actor_subject String   @db.VarChar(128)
+  actor_display String?  @db.VarChar(128)
+  operation     String   @db.VarChar(64)
+  resource_type String   @db.VarChar(32)
+  resource_id   String   @db.Uuid
+  outcome       String   @db.VarChar(16)
+  request_id    String   @db.Uuid
+  delta         Json     @db.JsonB
+
+  @@index([created_at, id], map: "audit_logs_created_id_idx")
+  @@index([resource_type, resource_id, created_at], map: "audit_logs_resource_created_idx")
+  @@index([actor_issuer, actor_subject, created_at], map: "audit_logs_actor_created_idx")
+  @@map("audit_logs")
+  @@schema("management")
+}
+
+model RequestNonce {
+  issuer     String   @db.VarChar(128)
+  jti        String   @db.VarChar(128)
+  expires_at DateTime @db.Timestamptz(6)
+
+  @@id([issuer, jti])
+  @@index([expires_at], map: "request_nonces_expiry_idx")
+  @@map("request_nonces")
+  @@schema("management")
+}
+
+model GatewaySource {
+  gateway_id    String         @id @db.Uuid
+  current_epoch BigInt         @default(0)
+  created_at    DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime       @default(now()) @db.Timestamptz(6)
+  epochs        GatewayEpoch[]
+
+  @@map("gateway_sources")
+  @@schema("management")
+}
+
+model GatewayEpoch {
+  gateway_id           String        @db.Uuid
+  epoch                BigInt
+  boot_id              String        @db.Uuid
+  boot_started_at      DateTime      @db.Timestamptz(6)
+  activated_at         DateTime      @default(now()) @db.Timestamptz(6)
+  retired_at           DateTime?     @db.Timestamptz(6)
+  last_sequence        BigInt        @default(0)
+  last_digest          String?       @db.Char(64)
+  received_at          DateTime?     @db.Timestamptz(6)
+  snapshot_start       DateTime?     @db.Timestamptz(6)
+  snapshot_end         DateTime?     @db.Timestamptz(6)
+  coverage_start       DateTime?     @db.Timestamptz(6)
+  coverage_end         DateTime?     @db.Timestamptz(6)
+  gap                  Boolean       @default(true)
+  pending_sequence     BigInt?
+  pending_digest       String?       @db.Char(64)
+  pending_chunk_hashes Json?         @db.JsonB
+  pending_payload      Json?         @db.JsonB
+  pending_deadline     DateTime?     @db.Timestamptz(6)
+  source               GatewaySource @relation(fields: [gateway_id], references: [gateway_id], onDelete: Restrict, onUpdate: Restrict, map: "gateway_epochs_source_fk")
+
+  @@id([gateway_id, epoch])
+  @@unique([gateway_id, boot_id], map: "gateway_epochs_source_boot_key")
+  @@map("gateway_epochs")
+  @@schema("management")
+}

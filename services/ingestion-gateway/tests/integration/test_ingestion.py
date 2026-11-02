@@ -10,6 +10,7 @@ import httpx
 import pytest
 
 from app.config import Settings
+from app.identity import parse_ingest_headers
 from app.proto.remote_write_pb2 import WriteRequest
 
 
@@ -74,7 +75,7 @@ async def test_valid_request_returns_204_after_upstream(app_client, headers, mak
     assert len(calls) == 1
     decoded = WriteRequest.FromString(bytes(cramjam.snappy.decompress_raw(calls[0].content)))
     assert [(label.name, label.value) for label in decoded.timeseries[0].labels] == [
-        ("__name__", "infrapulse_unit_value"), ("agent_id", "agent-lab"), ("server_id", "srv-lab"),
+        ("__name__", "infrapulse_unit_value"), ("agent_id", "00000000-0000-4000-8000-000000000003"), ("server_id", "00000000-0000-4000-8000-000000000002"),
     ]
     assert "authorization" not in calls[0].headers
 
@@ -94,7 +95,7 @@ async def test_invalid_batch_never_forwarded(app_client, headers, make_write, pa
 
 @pytest.mark.parametrize("remove,add,status,code", [
     (b"authorization", [], 401, "invalid_authorization"),
-    (b"x-server-id", [], 400, "invalid_identity"),
+    (b"x-server-id", [(b'x-server-id', b'invalid/claim')], 400, "invalid_identity"),
     (b"user-agent", [(b"user-agent", b"")], 400, "invalid_protocol_header"),
     (b"content-encoding", [(b"content-encoding", b"gzip")], 415, "unsupported_media"),
     (b"content-type", [(b"content-type", b"application/json")], 415, "unsupported_media"),
@@ -354,7 +355,7 @@ async def test_cancel_during_codec_keeps_slot(app_client, headers, make_write, p
         assert (await client.post(PATH, headers=headers, content=payload)).status_code == 204
 
 
-async def test_pipeline_counts_and_single_offload(app_client, make_write, pack_write, identity, received_at_ms, monkeypatch):
+async def test_pipeline_counts_and_single_offload(app_client, make_write, pack_write, headers, received_at_ms, monkeypatch):
     import app.pipeline as pipeline
 
     phases = []
@@ -373,7 +374,7 @@ async def test_pipeline_counts_and_single_offload(app_client, make_write, pack_w
     async with app_client() as (app, _):
         limiter = app.state.pipeline.codec_limiter
         for _ in range(2):
-            result = await app.state.pipeline.handle(stream(), identity, received_at_ms=received_at_ms)
+            result = await app.state.pipeline.handle(stream(), parse_ingest_headers(headers), received_at_ms=received_at_ms)
             assert (result.forward.status_code, result.series_count, result.sample_count) == (204, 2, 3)
             with pytest.raises(FrozenInstanceError):
                 result.series_count = 99

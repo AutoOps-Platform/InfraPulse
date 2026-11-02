@@ -2,6 +2,8 @@
 
 import importlib.util
 import os
+import json
+from uuid import uuid4
 from pathlib import Path
 import subprocess
 import sys
@@ -72,12 +74,27 @@ assert r.skipped == 5 and r.passed == 0, (r.skipped, r.passed)
 assert not calls, "E2E performed network I/O without opt-in"
 '''
     environment = {k: v for k, v in os.environ.items() if k != "INFRAPULSE_RUN_E2E"}
-    result = subprocess.run(
-        [sys.executable, "-c", script, str(MODULE), str(tmp_path / "child-pytest")],
-        env=environment, capture_output=True, text=True, encoding="utf-8", timeout=30,
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "5 skipped" in result.stdout
+    output = tmp_path / 'offline-probe.capture'
+    with output.open('xb') as fd:
+        result = subprocess.run(
+            [sys.executable, "-c", script, str(MODULE), str(tmp_path / "child-pytest")],
+            env=environment, stdin=subprocess.DEVNULL, stdout=fd, stderr=fd, timeout=30,
+        )
+    assert result.returncode == 0, 'Offline child failed; private capture withheld'
+    assert "5 skipped" in output.read_text(encoding='utf-8')
+
+
+def test_protocol_headers_use_guarded_issued_fixture_not_arbitrary_bearer(e2e, tmp_path, monkeypatch):
+    # Count/boolean diagnostics only: never print credential-bearing header diffs.
+    credential = str(uuid4()) + '.' + 'a' * 43
+    server, agent = str(uuid4()), str(uuid4())
+    fixture = tmp_path / 'credential.private'
+    fixture.write_text(json.dumps({'api_key': credential, 'server_id': server, 'agent_id': agent}), encoding='utf-8')
+    monkeypatch.setenv('E2E_CREDENTIAL_FILE', str(fixture))
+    headers = e2e.protocol_headers.__wrapped__()
+    uses_issued_credential = headers.get('Authorization') == 'Bearer ' + credential
+    assert uses_issued_credential, 'Issued credential was not used'
+    assert headers.get('X-Server-ID') == server and headers.get('X-Agent-ID') == agent
 
 
 async def test_sender_retry_preserves_timestamp(e2e, clock):

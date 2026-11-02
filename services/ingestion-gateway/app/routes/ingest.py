@@ -38,7 +38,7 @@ async def ingest_remote_write(request: Request) -> Response:
     try:
         received_at_ms = utc_now_ms()
         raw_headers = request.scope["headers"]
-        identity = parse_ingest_headers(raw_headers)
+        headers = parse_ingest_headers(raw_headers)
         declared = _content_length(raw_headers, request.app.state.settings.max_compressed_bytes)
 
         async def stream() -> AsyncIterator[bytes]:
@@ -50,7 +50,7 @@ async def ingest_remote_write(request: Request) -> Response:
                 raise GatewayError(400, "invalid_content_length")
 
         result = await request.app.state.pipeline.handle(
-            stream(), identity, received_at_ms=received_at_ms,
+            stream(), headers, received_at_ms=received_at_ms,
         )
         if result.forward.error_code is not None:
             raise GatewayError(

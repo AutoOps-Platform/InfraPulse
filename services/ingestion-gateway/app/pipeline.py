@@ -1,6 +1,7 @@
 """No-queue admission and bounded, whole-batch ingestion processing."""
 
 import asyncio
+import time
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 
@@ -10,8 +11,14 @@ from app.codec import decode_write, encode_write
 from app.config import Settings
 from app.errors import GatewayError
 from app.forwarder import Forwarder, ForwardResult
-from app.identity import Identity
+from app.credentials import CredentialProvider
+from app.identity import Identity, IngestHeaders
 from app.validation import validate_and_normalize
+from app.status_reporter import StatusReporter
+
+
+def utc_now_ms() -> int:
+    return time.time_ns() // 1_000_000
 
 
 class AdmissionLease:
@@ -59,10 +66,15 @@ class PipelineResult:
 
 
 class IngestionPipeline:
-    def __init__(self, settings: Settings, admission: AdmissionController, forwarder: Forwarder):
+    def __init__(
+        self, settings: Settings, admission: AdmissionController, forwarder: Forwarder,
+        credential_provider: CredentialProvider, status_reporter: StatusReporter,
+    ):
         self.settings = settings
         self.admission = admission
         self.forwarder = forwarder
+        self.credential_provider = credential_provider
+        self.status_reporter = status_reporter
         self.codec_limiter = anyio.CapacityLimiter(settings.max_inflight)
         self.observer = None
 
@@ -103,12 +115,19 @@ class IngestionPipeline:
         return worker.result()
 
     async def handle(
-        self, stream: AsyncIterator[bytes], identity: Identity, *, received_at_ms: int,
+        self, stream: AsyncIterator[bytes], headers: IngestHeaders, *, received_at_ms: int,
     ) -> PipelineResult:
         lease = self.admission.acquire()
         if self.observer is not None:
             self.observer.inflight(1)
         try:
+            # One admission lease spans async authentication, streaming, worker join
+            # and forwarding. Neither the untrusted body nor a worker starts first.
+            proof = await self.credential_provider.verify(headers.api_key)
+            identity = proof.identity
+            if ((headers.server_id is not None and headers.server_id != identity.server_id)
+                    or (headers.agent_id is not None and headers.agent_id != identity.agent_id)):
+                raise GatewayError(403, 'identity_mismatch')
             payload = bytearray()
             try:
                 async with asyncio.timeout(self.settings.body_read_timeout_seconds):
@@ -124,6 +143,19 @@ class IngestionPipeline:
             if self.observer is not None:
                 self.observer._parsed(series_count, sample_count)
             result = await self.forwarder.forward(encoded)
+            if (result.result == 'accepted' and result.status_code == 204
+                    and result.upstream_status is not None and 200 <= result.upstream_status < 300):
+                try:
+                    # Receipt is after actual forwarding success, not ingress or
+                    # sample time. No await/task/queue or reporting slot here.
+                    self.status_reporter.record_success(proof, utc_now_ms())
+                except Exception:
+                    # A best-effort confidence failure cannot rewrite accepted204.
+                    if self.observer is not None:
+                        try:
+                            self.observer.record_status('dropped')
+                        except Exception:
+                            pass
             return PipelineResult(result, series_count, sample_count)
         finally:
             lease.release()

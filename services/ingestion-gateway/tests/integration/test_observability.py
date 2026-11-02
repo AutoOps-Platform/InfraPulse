@@ -19,7 +19,7 @@ PATH = "/api/v1/ingest/remote-write"
 PREFIX = "infrapulse_ingest_"
 RESULTS = {"accepted", "rejected", "too_large", "rate_limited", "unavailable", "timeout", "bad_status"}
 REASONS = {
-    "invalid_authorization", "invalid_identity", "unsupported_media", "invalid_protocol_header",
+    "invalid_authorization", "invalid_identity", "identity_mismatch", "credential_verification_unavailable", "unsupported_media", "invalid_protocol_header",
     "invalid_content_length", "empty_body", "invalid_snappy", "invalid_protobuf", "unsupported_fields",
     "empty_write", "empty_series", "invalid_labels", "identity_conflict", "duplicate_series",
     "invalid_timestamp", "payload_too_large", "too_many_series", "too_many_samples", "body_timeout",
@@ -103,7 +103,7 @@ async def test_metrics_have_finite_labels(app_client, headers, make_write, pack_
         metric = sample.name.removeprefix(PREFIX)
         if metric.startswith("requests_"):
             assert set(sample.labels) == {"status"}
-            assert sample.labels["status"] in {"204", "400", "401", "408", "413", "415", "429", "500", "502", "503", "504"}
+            assert sample.labels["status"] in {"204", "400", "401", "403", "408", "413", "415", "429", "500", "502", "503", "504"}
         elif metric.startswith("request_duration_"):
             assert set(sample.labels) <= {"status_class", "le"}
             assert sample.labels["status_class"] in {"2xx", "4xx", "5xx"}
@@ -218,7 +218,7 @@ async def test_cancelled_noncodec_lease_and_attempt(app_client, headers, make_wr
                 await asyncio.gather(task, return_exceptions=True)
 
 
-async def test_untrusted_paths_and_errors_are_redacted(app_client, headers, make_write, pack_write, capsys, monkeypatch):
+async def test_untrusted_paths_and_errors_are_redacted(app_client, headers, make_write, pack_write, capsys, monkeypatch, active_proof):
     secrets = ["token-SENTINEL", "identity-SENTINEL", "payload-SENTINEL", "body-SENTINEL",
                "exception-SENTINEL", "query-SENTINEL", "path-SENTINEL", "client-secret-id", "location-SENTINEL"]
     common = [(k, b"Bearer token-SENTINEL" if k == b"authorization" else v) for k, v in headers]
@@ -236,7 +236,11 @@ async def test_untrusted_paths_and_errors_are_redacted(app_client, headers, make
         return httpx.Response(outcome, content=b"body-SENTINEL",
                               headers={"Location": "http://location-SENTINEL:bad"})
     responses = []
-    async with app_client(upstream_transport=httpx.MockTransport(upstream)) as (app, client):
+    def credential_service(request):
+        assert json.loads(request.content) == {'api_key': 'token-SENTINEL'}
+        return httpx.Response(200, json=active_proof)
+    async with app_client(upstream_transport=httpx.MockTransport(upstream),
+            management_transport=httpx.MockTransport(credential_service)) as (app, client):
         responses.append(await client.post(PATH + "?secret=query-SENTINEL", headers=[
             (k, b"token-SENTINEL" if k == b"authorization" else v) for k, v in common], content=payload))
         responses.append(await client.post(PATH, headers=[
@@ -257,7 +261,8 @@ async def test_untrusted_paths_and_errors_are_redacted(app_client, headers, make
         monkeypatch.setattr(app.state.pipeline, "handle", unexpected)
         responses.append(await client.post(PATH, headers=common, content=payload))
         monkeypatch.setattr(app.state.pipeline, "handle", original)
-    async with app_client(Settings(rate_burst=1, rate_per_second=0.0001)) as (_, client):
+    async with app_client(Settings(rate_burst=1, rate_per_second=0.0001),
+            management_transport=httpx.MockTransport(credential_service)) as (_, client):
         await client.post(PATH, headers=common, content=payload)
         responses.append(await client.post(PATH, headers=common, content=payload))
     assert [r.status_code for r in responses] == [401, 400, 400, 413, 502, 503, 504, 503, 500, 404, 500, 500, 429]
@@ -266,7 +271,7 @@ async def test_untrusted_paths_and_errors_are_redacted(app_client, headers, make
     for secret in secrets:
         assert secret not in combined
     parsed = records(captured)
-    assert any(r["event"] == "identity_unverified" and r["level"] == "WARNING" for r in parsed)
+    assert not any(r['event'] == 'identity_unverified' for r in parsed)
     assert any(r["event"] == "lab_only" and r["level"] == "WARNING" for r in parsed)
     completions = [r for r in parsed if r["event"] == "request_completed"]
     for response in responses:
@@ -290,13 +295,15 @@ async def test_untrusted_paths_and_errors_are_redacted(app_client, headers, make
 async def test_request_preparation_is_not_an_upstream_attempt(app_client, headers, make_write, pack_write, monkeypatch):
     # Catch moving the attempt boundary above explicit Request construction.
     async with app_client() as (_, client):
+        # Warm the real provider first: Request is shared by both HTTP boundaries.
+        assert (await client.post(PATH, headers=headers, content=pack_write(make_write()))).status_code == 204
         def fail_request(*args, **kwargs):
             raise RuntimeError("preparation-SENTINEL")
         monkeypatch.setattr("app.forwarder.httpx.Request", fail_request)
         response = await client.post(PATH, headers=headers, content=pack_write(make_write()))
         assert response.status_code == 500 and "preparation-SENTINEL" not in response.text
         text = await scrape(client)
-        assert sum(s.value for s in samples(text) if s.name == PREFIX + "forward_attempts_total") == 0
+        assert sum(s.value for s in samples(text) if s.name == PREFIX + "forward_attempts_total") == 1
         assert value(text, "inflight_requests") == 0
 
 
@@ -322,5 +329,6 @@ async def test_logging_is_idempotent_and_sanitizes_runtime_loggers(app_client, c
     assert "SENTINEL" not in captured.out + captured.err and "client-secret-id" not in captured.out
     parsed = records(captured)
     assert len([r for r in parsed if r.get("request_id") == request_id]) == 1
-    assert len([r for r in parsed if r["event"] == "identity_unverified"]) == 2
+    assert not any(r['event'] == 'identity_unverified' for r in parsed)
+    assert len([r for r in parsed if r['event'] == 'lab_only']) == 2
     assert "Traceback" not in captured.out

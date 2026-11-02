@@ -1,5 +1,19 @@
 name: infrapulse
 
+x-management-hardening: &management-hardening
+  user: "10002:10002"
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  mem_limit: 512m
+  pids_limit: 128
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
 services:
   prometheus:
     image: prom/prometheus:${PROMETHEUS_IMAGE_TAG:?PROMETHEUS_IMAGE_TAG must be set and non-empty}
@@ -115,6 +129,16 @@ services:
     depends_on:
       prometheus:
         condition: service_healthy
+      management:
+        condition: service_healthy
+    user: "10001:10001"
+    volumes:
+      - type: bind
+        source: ${INGEST_SERVICE_SIGNING_KEY_FILE:?Gateway private key path required}
+        target: /run/secrets/gateway-signing-key
+        read_only: true
+        bind:
+          create_host_path: false
     # Deliberate allowlist: never inject the root dotenv or database credentials.
     environment:
       INGEST_PROMETHEUS_WRITE_URL: ${INGEST_PROMETHEUS_WRITE_URL:-http://prometheus:9090/api/v1/write}
@@ -137,6 +161,16 @@ services:
       INGEST_UPSTREAM_DEADLINE_SECONDS: ${INGEST_UPSTREAM_DEADLINE_SECONDS:-12}
       INGEST_READY_TIMEOUT_SECONDS: ${INGEST_READY_TIMEOUT_SECONDS:-1}
       INGEST_LOG_LEVEL: ${INGEST_LOG_LEVEL:-INFO}
+      INGEST_MANAGEMENT_BASE_URL: ${INGEST_MANAGEMENT_BASE_URL:-http://management:3000}
+      INGEST_GATEWAY_ID: ${INGEST_GATEWAY_ID:?fixed canonical gateway UUID required}
+      INGEST_SERVICE_KEY_ID: ${INGEST_SERVICE_KEY_ID:?trusted Gateway kid required}
+      INGEST_SERVICE_SIGNING_KEY_FILE: /run/secrets/gateway-signing-key
+      INGEST_CREDENTIAL_TIMEOUT_SECONDS: ${INGEST_CREDENTIAL_TIMEOUT_SECONDS:-2}
+      INGEST_CREDENTIAL_CACHE_TTL_SECONDS: ${INGEST_CREDENTIAL_CACHE_TTL_SECONDS:-30}
+      INGEST_CREDENTIAL_CACHE_MAX_ENTRIES: ${INGEST_CREDENTIAL_CACHE_MAX_ENTRIES:-1024}
+      INGEST_STATUS_INTERVAL_SECONDS: ${INGEST_STATUS_INTERVAL_SECONDS:-10}
+      INGEST_STATUS_TIMEOUT_SECONDS: ${INGEST_STATUS_TIMEOUT_SECONDS:-2}
+      INGEST_STATUS_MAX_PENDING_AGENTS: ${INGEST_STATUS_MAX_PENDING_AGENTS:-1024}
     restart: unless-stopped
     read_only: true
     tmpfs:
@@ -158,6 +192,122 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+  management:
+    <<: *management-hardening
+    build:
+      context: ../../services/management-backend
+      target: runtime
+    ports:
+      - "127.0.0.1:${MANAGEMENT_HOST_PORT:-3001}:3000"
+    networks: [monitoring, database]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Bootstrap/deploy/seed are explicit prior operator actions, never startup hooks.
+    environment:
+      PORT: "3000"
+      MANAGEMENT_DATABASE_URL_FILE: /run/secrets/runtime-url
+      MANAGEMENT_ADMIN_TRUST_FILE: /run/secrets/admin-trust
+      MANAGEMENT_SERVICE_TRUST_FILE: /run/secrets/service-trust
+      MANAGEMENT_GRAFANA_CONTEXT: ${MANAGEMENT_GRAFANA_CONTEXT:?explicit Grafana context required}
+      MANAGEMENT_AGENT_INGEST_BASE_URL: ${MANAGEMENT_AGENT_INGEST_BASE_URL:-http://127.0.0.1:8000}
+      MANAGEMENT_LOG_LEVEL: ${MANAGEMENT_LOG_LEVEL:-INFO}
+      MANAGEMENT_REQUEST_RATE_PER_SECOND: ${MANAGEMENT_REQUEST_RATE_PER_SECOND:-20}
+      MANAGEMENT_REQUEST_BURST: ${MANAGEMENT_REQUEST_BURST:-40}
+      MANAGEMENT_DB_POOL_MAX: ${MANAGEMENT_DB_POOL_MAX:-10}
+      MANAGEMENT_DB_POOL_TIMEOUT_MS: ${MANAGEMENT_DB_POOL_TIMEOUT_MS:-1000}
+      MANAGEMENT_NONCE_MAX_ENTRIES: ${MANAGEMENT_NONCE_MAX_ENTRIES:-20000}
+    volumes:
+      - type: bind
+        source: ${MANAGEMENT_DATABASE_URL_FILE:?runtime URL path required}
+        target: /run/secrets/runtime-url
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${MANAGEMENT_ADMIN_TRUST_FILE:?admin public trust path required}
+        target: /run/secrets/admin-trust
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${MANAGEMENT_SERVICE_TRUST_FILE:?service public trust path required}
+        target: /run/secrets/service-trust
+        read_only: true
+        bind: {create_host_path: false}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "--input-type=module", "-e", "try { const r = await fetch('http://127.0.0.1:3000/health/ready', {signal: AbortSignal.timeout(2000)}); process.exit(r.ok ? 0 : 1); } catch { process.exit(1); }"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  management-bootstrap:
+    <<: *management-hardening
+    profiles: [management-ops]
+    build: {context: ../../services/management-backend, target: migrate}
+    command: [node, scripts/bootstrap-db.ts]
+    networks: [database]
+    depends_on:
+      postgres: {condition: service_healthy}
+    restart: "no"
+    environment:
+      MANAGEMENT_BOOTSTRAP_DATABASE_URL_FILE: /run/secrets/bootstrap-url
+      MANAGEMENT_MIGRATION_DATABASE_URL_FILE: /run/secrets/owner-url
+      MANAGEMENT_DATABASE_URL_FILE: /run/secrets/runtime-url
+    volumes:
+      - type: bind
+        source: ${MANAGEMENT_BOOTSTRAP_DATABASE_URL_FILE:?operator bootstrap URL path required}
+        target: /run/secrets/bootstrap-url
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${MANAGEMENT_MIGRATION_DATABASE_URL_FILE:?owner URL path required}
+        target: /run/secrets/owner-url
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${MANAGEMENT_DATABASE_URL_FILE:?runtime URL path required}
+        target: /run/secrets/runtime-url
+        read_only: true
+        bind: {create_host_path: false}
+
+  management-migrate:
+    <<: *management-hardening
+    profiles: [management-ops]
+    build: {context: ../../services/management-backend, target: migrate}
+    command: [node, scripts/migrate-db.ts]
+    networks: [database]
+    depends_on:
+      postgres: {condition: service_healthy}
+    restart: "no"
+    environment:
+      MANAGEMENT_MIGRATION_DATABASE_URL_FILE: /run/secrets/owner-url
+    volumes:
+      - type: bind
+        source: ${MANAGEMENT_MIGRATION_DATABASE_URL_FILE:?owner URL path required}
+        target: /run/secrets/owner-url
+        read_only: true
+        bind: {create_host_path: false}
+
+  management-seed:
+    <<: *management-hardening
+    profiles: [management-ops]
+    build: {context: ../../services/management-backend, target: migrate}
+    command: [node, scripts/seed-db.ts]
+    networks: [database]
+    depends_on:
+      postgres: {condition: service_healthy}
+    restart: "no"
+    environment:
+      MANAGEMENT_MIGRATION_DATABASE_URL_FILE: /run/secrets/owner-url
+      INGEST_GATEWAY_ID: ${INGEST_GATEWAY_ID:?fixed canonical gateway UUID required}
+    volumes:
+      - type: bind
+        source: ${MANAGEMENT_MIGRATION_DATABASE_URL_FILE:?owner URL path required}
+        target: /run/secrets/owner-url
+        read_only: true
+        bind: {create_host_path: false}
 
 networks:
   monitoring:

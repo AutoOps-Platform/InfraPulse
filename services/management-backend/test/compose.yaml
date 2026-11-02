@@ -1,0 +1,132 @@
+services:
+  pg:
+    image: postgres:18.6-bookworm
+    environment:
+      POSTGRES_DB: infrapulse_test_${TEST_DB_RUN_ID:?test run id required}
+      POSTGRES_PASSWORD_FILE: /run/secrets/bootstrap-password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    labels:
+      infrapulse.test.run_id: ${TEST_DB_RUN_ID:?test run id required}
+      infrapulse.test.database: infrapulse_test_${TEST_DB_RUN_ID:?test run id required}
+    ports:
+      - '127.0.0.1::5432'
+    volumes:
+      - type: bind
+        source: ${TEST_DB_PRIVATE_DIR:?private directory required}/bootstrap-password
+        target: /run/secrets/bootstrap-password
+        read_only: true
+        bind: {create_host_path: false}
+    tmpfs:
+      - /var/lib/postgresql:rw,noexec,nosuid,size=256m
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d "$$POSTGRES_DB"']
+      interval: 1s
+      timeout: 2s
+      retries: 120
+    stop_grace_period: 10s
+    networks: [default, database]
+
+  # The T2 host harness still starts only pg by default. No shared services or
+  # named volumes; the opt-in parent owns this exact run's complete lifecycle.
+  management:
+    profiles: [fullstack]
+    image: ${TASK12_MANAGEMENT_RUNTIME_IMAGE:-infrapulse-task12-management:runtime}
+    labels:
+      infrapulse.test.run_id: ${TEST_DB_RUN_ID:?test run id required}
+    user: "10002:10002"
+    networks: [monitoring, database]
+    ports: ['127.0.0.1::3000']
+    depends_on:
+      pg: {condition: service_healthy}
+    environment:
+      PORT: "3000"
+      MANAGEMENT_DATABASE_URL_FILE: /run/secrets/runtime-url
+      MANAGEMENT_ADMIN_TRUST_FILE: /run/secrets/admin-trust
+      MANAGEMENT_SERVICE_TRUST_FILE: /run/secrets/service-trust
+      MANAGEMENT_GRAFANA_CONTEXT: task12-isolated-fixture
+    volumes:
+      - type: bind
+        source: ${TASK12_PRIVATE_DIR:-.}/runtime-network-url
+        target: /run/secrets/runtime-url
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${TASK12_PRIVATE_DIR:-.}/admin-trust
+        target: /run/secrets/admin-trust
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${TASK12_PRIVATE_DIR:-.}/service-trust
+        target: /run/secrets/service-trust
+        read_only: true
+        bind: {create_host_path: false}
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+    healthcheck:
+      test: [CMD, node, --input-type=module, -e, "try { const r = await fetch('http://127.0.0.1:3000/health/ready', {signal: AbortSignal.timeout(2000)}); process.exit(r.ok ? 0 : 1); } catch { process.exit(1); }"]
+      interval: 1s
+      timeout: 3s
+      retries: 120
+
+  prometheus:
+    profiles: [fullstack]
+    image: prom/prometheus:v3.13.5-busybox
+    labels:
+      infrapulse.test.run_id: ${TEST_DB_RUN_ID:?test run id required}
+    command: [--config.file=/etc/prometheus/prometheus.yml, --storage.tsdb.path=/prometheus, --web.enable-remote-write-receiver]
+    networks: [monitoring]
+    tmpfs: ['/prometheus:rw,uid=65534,gid=65534,size=64m']
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, 'http://127.0.0.1:9090/-/ready']
+      interval: 1s
+      timeout: 2s
+      retries: 120
+
+  ingest:
+    profiles: [fullstack]
+    image: ${TASK12_GATEWAY_RUNTIME_IMAGE:-infrapulse-task12-gateway:runtime}
+    labels:
+      infrapulse.test.run_id: ${TEST_DB_RUN_ID:?test run id required}
+    user: "10001:10001"
+    networks: [monitoring]
+    ports: ['127.0.0.1::8000']
+    depends_on:
+      management: {condition: service_healthy}
+      prometheus: {condition: service_healthy}
+    environment:
+      INGEST_GATEWAY_ID: 10000000-0000-4000-8000-000000000001
+      INGEST_SERVICE_KEY_ID: task12-gateway
+      INGEST_SERVICE_SIGNING_KEY_FILE: /run/secrets/gateway-signing-key
+    volumes:
+      - type: bind
+        source: ${TASK12_PRIVATE_DIR:-.}/gateway-signing-key
+        target: /run/secrets/gateway-signing-key
+        read_only: true
+        bind: {create_host_path: false}
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=2).close()"]
+      interval: 1s
+      timeout: 3s
+      retries: 120
+
+networks:
+  default:
+  monitoring:
+  database:
+    internal: true

@@ -1,6 +1,6 @@
 """Parse raw ASGI headers without authenticating self-declared identities."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import re
 
 from app.errors import GatewayError
@@ -20,7 +20,14 @@ class Identity:
     agent_id: str
 
 
-def parse_ingest_headers(raw_headers: list[tuple[bytes, bytes]]) -> Identity:
+@dataclass(frozen=True)
+class IngestHeaders:
+    api_key: str = field(repr=False)
+    server_id: str | None
+    agent_id: str | None
+
+
+def parse_ingest_headers(raw_headers: list[tuple[bytes, bytes]]) -> IngestHeaders:
     # Retain every occurrence. A normal header map would hide duplicates.
     values: dict[bytes, list[bytes]] = {}
     for name, value in raw_headers:
@@ -34,11 +41,14 @@ def parse_ingest_headers(raw_headers: list[tuple[bytes, bytes]]) -> Identity:
 
     authorization = single(b"authorization", 401, "invalid_authorization")
     match = _AUTHORIZATION.fullmatch(authorization)
-    if match is None or len(match[1]) > 4096:
+    if match is None or len(match[1]) > 4096 or not match[1].isascii():
         raise GatewayError(401, "invalid_authorization")
 
     ids = []
     for name in (b"x-server-id", b"x-agent-id"):
+        if name not in values:
+            ids.append(None)
+            continue
         value = single(name, 400, "invalid_identity")
         if _ID.fullmatch(value) is None:
             raise GatewayError(400, "invalid_identity")
@@ -61,4 +71,4 @@ def parse_ingest_headers(raw_headers: list[tuple[bytes, bytes]]) -> Identity:
         if re.fullmatch(rb"[0-9]+", length) is None:
             raise GatewayError(400, "invalid_content_length")
 
-    return Identity(*ids)
+    return IngestHeaders(match[1].decode('ascii'), *ids)

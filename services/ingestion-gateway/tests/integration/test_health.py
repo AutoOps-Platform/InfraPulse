@@ -91,8 +91,9 @@ async def test_lifespan_closes_clients():
         async def aclose(self):
             self.closed = True
 
-    upstream, ready = Transport(), Transport()
-    app = create_app(Settings(), upstream_transport=upstream, ready_transport=ready)
+    upstream, ready, management, management_ready = [Transport() for _ in range(4)]
+    app = create_app(Settings(), upstream_transport=upstream, ready_transport=ready,
+        management_transport=management, management_ready_transport=management_ready)
     assert not app.state.initialized
     async with app.router.lifespan_context(app):
         ready_client = app.state.ready_client
@@ -100,7 +101,7 @@ async def test_lifespan_closes_clients():
         assert not ready_client.is_closed
     assert not app.state.initialized
     assert ready_client.is_closed
-    assert upstream.closed and ready.closed
+    assert upstream.closed and ready.closed and management.closed and management_ready.closed
 
 
 async def test_clients_close_if_lifespan_body_fails():
@@ -112,11 +113,14 @@ async def test_clients_close_if_lifespan_body_fails():
 
     upstream = Transport(lambda request: httpx.Response(204))
     ready = Transport(lambda request: httpx.Response(200))
-    app = create_app(Settings(), upstream_transport=upstream, ready_transport=ready)
+    management = Transport(lambda request: httpx.Response(200))
+    management_ready = Transport(lambda request: httpx.Response(204))
+    app = create_app(Settings(), upstream_transport=upstream, ready_transport=ready,
+        management_transport=management, management_ready_transport=management_ready)
     with pytest.raises(RuntimeError, match="owner failure"):
         async with app.router.lifespan_context(app):
             raise RuntimeError("owner failure")
-    assert upstream.closed and ready.closed
+    assert upstream.closed and ready.closed and management.closed and management_ready.closed
     assert not app.state.initialized
 
 
@@ -167,17 +171,63 @@ async def test_production_client_and_transport_bounds(monkeypatch):
     app = create_app(Settings(max_inflight=3))
     async with app.router.lifespan_context(app):
         assert app.state.initialized
-    assert len(clients) == len(transports) == 2
+    assert len(clients) == len(transports) == 5
     assert all(instance.is_closed for instance, _ in clients)
-    assert clients[0][0] is not clients[1][0]
+    assert len({id(instance) for instance, _ in clients}) == 5
     for _, options in clients:
         assert options["trust_env"] is False
         assert options["follow_redirects"] is False
-    for (_, options), expected_limit in zip(transports, (3, 2), strict=True):
+    for (_, options), expected_limit in zip(transports, (3, 2, 3, 2, 1), strict=True):
         assert options["retries"] == 0
         assert options["trust_env"] is False
         assert options["limits"].max_connections == expected_limit
         assert options["limits"].max_keepalive_connections == expected_limit
+
+
+@pytest.mark.parametrize('outcome,expected', [(204, 200), (200, 503), (401, 503), (403, 503), (302, 503), (503, 503), ('network', 503), ('timeout', 503)])
+async def test_signed_management_readiness_is_required(app_client, outcome, expected):
+    calls = []
+    block = asyncio.Event()
+    async def ready(request):
+        calls.append(request)
+        assert request.method == 'GET'
+        assert request.url.raw_path == b'/internal/v1/credentials/health'
+        assert request.content == b''
+        assert request.headers['authorization'].startswith('Bearer ey')
+        if outcome == 'network':
+            raise httpx.ConnectError('private-health-sentinel')
+        if outcome == 'timeout':
+            await block.wait()
+        return httpx.Response(outcome, headers={'Location': 'http://other.test/'})
+    async with app_client(Settings(ready_timeout_seconds=0.02),
+            management_ready_transport=httpx.MockTransport(ready)) as (_, client):
+        assert (await client.get('/health/live')).status_code == 200
+        assert calls == []
+        response = await asyncio.wait_for(client.get('/health/ready'), 0.5)
+        assert response.status_code == expected
+        assert 'private-health-sentinel' not in response.text
+    assert len(calls) == 1
+
+
+async def test_readiness_has_one_combined_deadline(app_client):
+    loop = asyncio.get_running_loop()
+    calls = []
+    async def delay(label, status):
+        calls.append(label)
+        barrier = loop.create_future()
+        timer = loop.call_later(0.06, barrier.set_result, None)
+        try:
+            await barrier
+        finally:
+            timer.cancel()
+        return httpx.Response(status)
+    async with app_client(Settings(ready_timeout_seconds=0.1),
+            ready_transport=httpx.MockTransport(lambda request: delay('prometheus', 200)),
+            management_ready_transport=httpx.MockTransport(lambda request: delay('credentials', 204))) as (_, client):
+        start = loop.time()
+        assert (await asyncio.wait_for(client.get('/health/ready'), 0.5)).status_code == 503
+        assert loop.time() - start < 0.3
+        assert calls == ['prometheus', 'credentials']
 
 
 async def test_readiness_cancellation_propagates(app_client):

@@ -9,12 +9,14 @@ import json
 import os
 import shlex
 import subprocess
+import tempfile
 
 import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[4]
 PROJECT = ROOT / "services" / "ingestion-gateway"
+pytestmark = pytest.mark.deployment
 DEFAULTS = {
     "INGEST_MAX_COMPRESSED_BYTES": "1048576",
     "INGEST_MAX_DECOMPRESSED_BYTES": "8388608",
@@ -36,6 +38,18 @@ DEFAULTS = {
     "INGEST_PROMETHEUS_WRITE_URL": "http://prometheus:9090/api/v1/write",
     "INGEST_PROMETHEUS_READY_URL": "http://prometheus:9090/-/ready",
     "INGEST_LOG_LEVEL": "INFO",
+    "INGEST_MANAGEMENT_BASE_URL": "http://management:3000",
+    "INGEST_CREDENTIAL_TIMEOUT_SECONDS": "2",
+    "INGEST_CREDENTIAL_CACHE_TTL_SECONDS": "30",
+    "INGEST_CREDENTIAL_CACHE_MAX_ENTRIES": "1024",
+    "INGEST_STATUS_INTERVAL_SECONDS": "10",
+    "INGEST_STATUS_TIMEOUT_SECONDS": "2",
+    "INGEST_STATUS_MAX_PENDING_AGENTS": "1024",
+}
+REQUIRED = {
+    "INGEST_GATEWAY_ID": "${INGEST_GATEWAY_ID:?fixed canonical gateway UUID required}",
+    "INGEST_SERVICE_KEY_ID": "${INGEST_SERVICE_KEY_ID:?trusted Gateway kid required}",
+    "INGEST_SERVICE_SIGNING_KEY_FILE": "/run/secrets/gateway-signing-key",
 }
 
 
@@ -50,8 +64,14 @@ def test_ingest_is_loopback_only_and_not_a_test_or_source_container(compose):
     assert ingest["build"] == {"context": "../../services/ingestion-gateway"}
     assert ingest["ports"] == ["127.0.0.1:${INGEST_HOST_PORT:-8000}:8000"]
     assert ingest["networks"] == ["monitoring"]
-    assert ingest["depends_on"] == {"prometheus": {"condition": "service_healthy"}}
-    assert not set(ingest) & {"volumes", "env_file", "command", "entrypoint", "privileged", "network_mode"}
+    assert ingest["depends_on"] == {"prometheus": {"condition": "service_healthy"}, "management": {"condition": "service_healthy"}}
+    assert not set(ingest) & {"env_file", "command", "entrypoint", "privileged", "network_mode"}
+    assert ingest["user"] == "10001:10001"
+    assert ingest["volumes"] == [{
+        "type": "bind", "source": "${INGEST_SERVICE_SIGNING_KEY_FILE:?Gateway private key path required}",
+        "target": "/run/secrets/gateway-signing-key", "read_only": True,
+        "bind": {"create_host_path": False},
+    }]
 
 
 def test_ingest_enforces_resource_security_and_restart_policy(compose):
@@ -87,15 +107,19 @@ def test_ingest_healthcheck_uses_stdlib_readiness_with_bounded_time(compose):
 def test_ingest_only_receives_explicit_gateway_settings_with_safe_defaults(compose):
     ingest = compose["services"].get("ingest")
     assert ingest is not None, "Task 7 ingest service is missing"
-    assert ingest["environment"] == {key: "${" + key + ":-" + value + "}" for key, value in DEFAULTS.items()}
+    assert ingest["environment"] == {**{key: "${" + key + ":-" + value + "}" for key, value in DEFAULTS.items()}, **REQUIRED}
     example = dict(line.split("=", 1) for line in (ROOT / ".env.example").read_text(encoding="utf-8").splitlines()
                    if line and not line.startswith("#"))
-    assert {key: value for key, value in example.items() if key.startswith("INGEST_")} == {**DEFAULTS, "INGEST_HOST_PORT": "8000"}
+    assert {key: value for key, value in example.items() if key.startswith("INGEST_")} == {
+        **DEFAULTS, "INGEST_HOST_PORT": "8000", "INGEST_GATEWAY_ID": "", "INGEST_SERVICE_KEY_ID": "",
+        "INGEST_SERVICE_SIGNING_KEY_FILE": "",  # paths/identity explicitly supplied by operator
+    }
 
 
 def test_existing_project_services_storage_networks_and_receiver_are_preserved(compose):
     assert compose["name"] == "infrapulse"
-    assert set(compose["services"]) == {"prometheus", "grafana", "postgres", "ingest"}
+    assert set(compose["services"]) == {"prometheus", "grafana", "postgres", "ingest", "management",
+                                        "management-bootstrap", "management-migrate", "management-seed"}
     assert compose["volumes"] == {"prometheus_data": None, "grafana_data": None, "postgres_data": None}
     assert compose["networks"] == {"monitoring": {"driver": "bridge"}, "database": {"driver": "bridge", "internal": True}}
     services = compose["services"]
@@ -152,7 +176,7 @@ def test_image_build_is_frozen_and_runtime_is_default_without_dev_tools():
     assert env["PATH"] == "/app/.venv/bin:$PATH"
     assert env["PYTHONDONTWRITEBYTECODE"] == "1"
     cmd = next(json.loads(value) for instruction, value in runtime if instruction == "CMD")
-    assert cmd == ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--no-access-log"]
+    assert cmd == ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--no-access-log", "--loop", "asyncio"]
 
 
 def test_test_stage_keeps_linux_tests_available_without_using_it_for_runtime():
@@ -230,3 +254,81 @@ def test_canonical_compose_command_resolves_build_and_existing_binds_inside_repo
     assert (ROOT / "observability/prometheus/prometheus.yml").is_file()
     assert (ROOT / "observability/grafana/provisioning").is_dir()
     assert (ROOT / "observability/grafana/dashboards").is_dir()
+
+
+def isolated_compose_paths(directory: Path, *, wrong_anchor=False):
+    """Controller Ruling1: private NONSECRET config, only path projection escapes.
+
+    Neither ambient interpolation/COMPOSE overrides nor root dotenv participates.
+    Output uses guarded native FDs, bounded reads and finite errors, never dumps.
+    """
+    fixture = directory / "fixture.env"
+    values = {
+        "PROMETHEUS_IMAGE_TAG": "v3.13.5-busybox", "GRAFANA_IMAGE_TAG": "13.3.0",
+        "POSTGRES_IMAGE_TAG": "18.6-bookworm", "GRAFANA_ADMIN_PASSWORD": "nonsecret-placeholder",
+        "POSTGRES_PASSWORD": "nonsecret-placeholder", "MANAGEMENT_GRAFANA_CONTEXT": "fixture-only",
+        "INGEST_GATEWAY_ID": "10000000-0000-4000-8000-000000000001", "INGEST_SERVICE_KEY_ID": "fixture-gateway",
+    }
+    for key in ("MANAGEMENT_DATABASE_URL_FILE", "MANAGEMENT_MIGRATION_DATABASE_URL_FILE",
+                "MANAGEMENT_BOOTSTRAP_DATABASE_URL_FILE", "MANAGEMENT_ADMIN_TRUST_FILE",
+                "MANAGEMENT_SERVICE_TRUST_FILE", "INGEST_SERVICE_SIGNING_KEY_FILE"):
+        values[key] = (directory / "nonsecret-placeholder").as_posix()
+    fixture.write_text("".join(f"{key}={value}\n" for key, value in values.items()), encoding="utf-8")
+    env = {key: value for key, value in os.environ.items() if key.upper() in {
+        "PATH", "SYSTEMROOT", "WINDIR", "USERPROFILE", "HOME", "APPDATA", "LOCALAPPDATA",
+        "PROGRAMFILES", "DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG", "TEMP", "TMP",
+    }}
+    command = ["docker", "compose", "--env-file", str(fixture.resolve()), "-f", "deploy/compose/compose.yaml"]
+    if wrong_anchor:
+        command[2:2] = ["--project-directory", "."]
+    def invoke(arguments, out, err):
+        try:
+            return subprocess.run(command + arguments, cwd=ROOT, env=env,
+                                  stdin=subprocess.DEVNULL, stdout=out, stderr=err, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            raise RuntimeError("Isolated Compose invocation unavailable; output withheld") from None
+
+    with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+        quiet = invoke(["config", "--quiet"], out, err)
+        if quiet.returncode:
+            if wrong_anchor:
+                return None
+            raise RuntimeError("Isolated Compose quiet qualification failed; output withheld")
+        out.seek(0); out.truncate()
+        result = invoke(["config", "--format", "json"], out, err)
+        if result.returncode:
+            if wrong_anchor:
+                return None
+            raise RuntimeError("Isolated Compose path qualification failed; output withheld")
+        out.seek(0)
+        raw = out.read(1048577)
+        if len(raw) > 1048576:
+            raise RuntimeError("Isolated Compose output exceeded bound")
+    try:
+        expanded = json.loads(raw)
+        services = expanded["services"]
+        return {
+            "project": expanded["name"],
+            "ingest_build": services["ingest"]["build"]["context"],
+            "management_build": services["management"]["build"]["context"],
+            "prometheus_bind": [v["source"] for v in services["prometheus"]["volumes"] if v["type"] == "bind"],
+            "grafana_bind": [v["source"] for v in services["grafana"]["volumes"] if v["type"] == "bind"],
+        }
+    except (ValueError, KeyError, TypeError):
+        raise RuntimeError("Isolated Compose allowlisted projection unavailable") from None
+
+
+@pytest.mark.skipif(os.environ.get("TASK12_RUN_COMPOSE_PATH_CHECK") != "1", reason="opt-in generated-nonsecret Compose qualification")
+def test_task12_real_compose_paths_use_safe_fixture_and_reject_root_anchor(tmp_path):
+    expected = {
+        "project": "infrapulse", "ingest_build": str(PROJECT),
+        "management_build": str(ROOT / "services/management-backend"),
+        "prometheus_bind": [str(ROOT / "observability/prometheus/prometheus.yml")],
+        "grafana_bind": [str(ROOT / "observability/grafana/provisioning"), str(ROOT / "observability/grafana/dashboards")],
+    }
+    # Do not expose configuration or assertion object dumps, even on failure.
+    if isolated_compose_paths(tmp_path) != expected:
+        pytest.fail("Canonical normalized Compose paths differ from repository paths", pytrace=False)
+    wrong = isolated_compose_paths(tmp_path, wrong_anchor=True)
+    if wrong is not None and wrong == expected:
+        pytest.fail("Incorrect project-directory anchor was not rejected", pytrace=False)

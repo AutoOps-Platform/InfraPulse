@@ -20,8 +20,10 @@ from app.forwarder import FORWARD_RESULTS
 
 _INGEST_ROUTE = "/api/v1/ingest/remote-write"
 _ROUTES = frozenset({_INGEST_ROUTE, "/health/live", "/health/ready", "/metrics"})
-_STATUSES = frozenset({204, 400, 401, 408, 413, 415, 429, 500, 502, 503, 504})
-_EVENTS = frozenset({"request_completed", "identity_unverified", "lab_only", "server_error"})
+_STATUSES = frozenset({204, 400, 401, 403, 408, 413, 415, 429, 500, 502, 503, 504})
+STATUS_RESULTS = frozenset({'committed', 'unavailable', 'conflict', 'abandoned', 'overflow', 'dropped', 'clock_gap'})
+STATUS_EVENTS = {result: 'status_report_' + result for result in STATUS_RESULTS}
+_EVENTS = frozenset({"request_completed", "lab_only", "server_error", *STATUS_EVENTS.values()})
 _LOGGER = logging.getLogger("infrapulse.ingest")
 
 
@@ -95,7 +97,7 @@ def log_event(
         "duration_ms": duration_ms, "series_count": series_count, "sample_count": sample_count,
         "upstream_status": upstream_status, "error_code": error_code,
     }
-    if event in {"identity_unverified", "lab_only"}:
+    if event == "lab_only":
         level = logging.WARNING
     else:
         level = logging.ERROR if status == 500 else logging.INFO
@@ -113,6 +115,12 @@ class Observability:
         self._rejections = Counter(prefix + "rejections_total", "Ingestion failures by finite code.", ["reason"], registry=self.registry)
         self._forwards = Counter(prefix + "forward_attempts_total", "Completed upstream attempts.", ["result"], registry=self.registry)
         self._upstream_duration = Histogram(prefix + "upstream_duration_seconds", "Upstream attempt duration.", ["result"], registry=self.registry)
+        self._status_reports = Counter('infrapulse_status_reports_total', 'Best-effort status sender outcomes.', ['result'], registry=self.registry)
+
+    def record_status(self, result: str) -> None:
+        result = result if result in STATUS_RESULTS else 'unavailable'
+        self._status_reports.labels(result).inc()
+        _LOGGER.info('', extra={'gateway_fields': {'event': STATUS_EVENTS[result]}})
 
     def record_request(self, *, status: int, duration_seconds: float, reason: str | None) -> None:
         status = status if status in _STATUSES else 500

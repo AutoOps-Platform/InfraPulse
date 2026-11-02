@@ -38,8 +38,9 @@ def test_default_limits(settings, name, expected):
 
 @pytest.mark.parametrize("name", NUMERIC_FIELDS)
 def test_settings_read_prefixed_environment(monkeypatch, name):
-    monkeypatch.setenv(f"INGEST_{name.upper()}", "7")
-    assert getattr(Settings(), name) == 7
+    value = 0.5 if name == 'ready_timeout_seconds' else 7
+    monkeypatch.setenv(f'INGEST_{name.upper()}', str(value))
+    assert getattr(Settings(), name) == value
 
 
 @pytest.mark.parametrize("name", NUMERIC_FIELDS)
@@ -112,6 +113,49 @@ def test_settings_do_not_read_dotenv_or_unprefixed_env(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("MAX_SAMPLES", "2")
     assert Settings().max_samples == 20000
+
+
+def test_omitted_management_origin_uses_documented_default(monkeypatch):
+    monkeypatch.delenv('INGEST_MANAGEMENT_BASE_URL')
+    resolved = Settings()
+    assert resolved.management_base_url == 'http://management:3000'
+    assert 'management_base_url' not in repr(resolved)
+
+
+@pytest.mark.parametrize('name', ['gateway_id', 'service_key_id', 'service_signing_key_file'])
+def test_auth_configuration_is_required(monkeypatch, name):
+    monkeypatch.delenv('INGEST_' + name.upper())
+    with pytest.raises(ValueError):
+        Settings()
+
+
+@pytest.mark.parametrize('name,value', [
+    ('management_base_url', 'http://user:secret@management:3000'),
+    ('management_base_url', 'http://management:3000/path'),
+    ('management_base_url', 'http://management:3000/?query'),
+    ('management_base_url', 'http://management:3000/#fragment'),
+    ('management_base_url', 'http://management:3000/?'),
+    ('management_base_url', 'http://management:3000/#'),
+    ('management_base_url', 'http://management:3000/\n'),
+    ('gateway_id', 'not-a-uuid'),
+    ('gateway_id', '00000000-0000-4000-8000-00000000000A'),
+    ('service_key_id', ''), ('service_key_id', 'key\nsecret'),
+    ('service_key_id', 'k' * 257), ('service_signing_key_file', ''),
+    ('credential_timeout_seconds', 2.001), ('credential_timeout_seconds', 0),
+    ('credential_cache_ttl_seconds', 30.001), ('credential_cache_ttl_seconds', 0),
+    ('credential_cache_max_entries', 10001), ('credential_cache_max_entries', 0),
+    ('ready_timeout_seconds', 1.001),
+])
+def test_auth_configuration_rejects_unsafe_values(name, value):
+    with pytest.raises(ValueError):
+        Settings(**{name: value})
+
+
+def test_credential_defaults_and_caps(settings):
+    assert settings.credential_timeout_seconds == 2
+    assert settings.credential_cache_ttl_seconds == 30
+    assert settings.credential_cache_max_entries == 1024
+    assert Settings(credential_cache_max_entries=10000).credential_cache_max_entries == 10000
 
 
 def test_fixture_values(identity, received_at_ms):

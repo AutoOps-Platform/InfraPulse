@@ -22,4 +22,4 @@ ENV PATH="/app/.venv/bin:$PATH" PYTHONDONTWRITEBYTECODE=1
 COPY --from=build /app/.venv /app/.venv
 COPY app/ ./app/
 USER 10001:10001
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--no-access-log"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--no-access-log", "--loop", "asyncio"]

@@ -1,6 +1,9 @@
 """Server-owned gateway settings; no implicit dotenv loading."""
 
 from typing import Annotated, Literal
+from pathlib import Path
+import re
+from uuid import UUID
 from urllib.parse import urlsplit
 
 from pydantic import AnyHttpUrl, Field, PositiveInt, TypeAdapter, field_validator
@@ -34,11 +37,51 @@ class Settings(BaseSettings):
     write_timeout_seconds: PositiveFiniteFloat = 10
     pool_timeout_seconds: PositiveFiniteFloat = 1
     upstream_deadline_seconds: PositiveFiniteFloat = 12
-    ready_timeout_seconds: PositiveFiniteFloat = 1
+    ready_timeout_seconds: Annotated[float, Field(gt=0, le=1, allow_inf_nan=False)] = 1
+    management_base_url: str = Field(default='http://management:3000', repr=False)
+    gateway_id: str
+    service_key_id: str
+    service_signing_key_file: Path = Field(repr=False)
+    credential_timeout_seconds: Annotated[float, Field(gt=0, le=2, allow_inf_nan=False)] = 2
+    credential_cache_ttl_seconds: Annotated[float, Field(gt=0, le=30, allow_inf_nan=False)] = 30
+    credential_cache_max_entries: Annotated[int, Field(ge=1, le=10000)] = 1024
+    status_interval_seconds: Annotated[float, Field(gt=0, le=10, allow_inf_nan=False)] = 10
+    status_timeout_seconds: Annotated[float, Field(gt=0, le=2, allow_inf_nan=False)] = 2
+    status_max_pending_agents: Annotated[int, Field(ge=1, le=1024)] = 1024
     prometheus_write_url: str = "http://prometheus:9090/api/v1/write"
     prometheus_ready_url: str = "http://prometheus:9090/-/ready"
     log_level: Literal["NOTSET", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     host_port: PositiveInt = 8000
+
+    @field_validator('gateway_id')
+    @classmethod
+    def validate_gateway_id(cls, value: str) -> str:
+        if str(UUID(value)) != value:
+            raise ValueError('Gateway ID must be a canonical UUID')
+        return value
+
+    @field_validator('service_key_id')
+    @classmethod
+    def validate_service_key_id(cls, value: str) -> str:
+        if re.fullmatch(r'[A-Za-z0-9._-]{1,64}', value) is None:
+            raise ValueError('Invalid service key ID')
+        return value
+
+    @field_validator('service_signing_key_file', mode='before')
+    @classmethod
+    def validate_signing_key_path(cls, value):
+        if not isinstance(value, (str, Path)) or not str(value).strip() or re.search(r'[\x00-\x1f\x7f]', str(value)):
+            raise ValueError('Invalid signing key path')
+        return value
+
+    @field_validator('management_base_url')
+    @classmethod
+    def validate_management_url(cls, value: str) -> str:
+        cls.validate_upstream_url(value)
+        parsed = urlsplit(value)
+        if parsed.path not in {'', '/'} or '?' in value:
+            raise ValueError('Management URL must be an HTTP(S) origin')
+        return value
 
     @field_validator("prometheus_write_url", "prometheus_ready_url")
     @classmethod

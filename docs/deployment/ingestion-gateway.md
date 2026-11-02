@@ -1,177 +1,80 @@
-# Bước 2 — Ingestion Gateway (local lab)
+# Ingestion Gateway — Step3 authenticated lab contract
 
-## Phạm vi và trạng thái
+## Current code versus historical shared runtime
 
-FastAPI nhận Remote Write 1.0 **scalar subset** tại `POST /api/v1/ingest/remote-write`, chuẩn hóa nhãn rồi forward **một lần** tới Prometheus hiện hữu. [Nghiệm thu thực tế GW-01–GW-15](<ingestion-gateway-acceptance.md>) phân biệt tests, runtime, UI và native-host isolation; không dùng HTTP 204 thay bằng chứng query.
+The [Step2 GW-01–GW-15 acceptance](<ingestion-gateway-acceptance.md>) is historical evidence (including its UI/native-host checks and limitations), not proof of Step3 deployment. That old lab accepted arbitrary nonempty Bearer/self-declared IDs. **Current Step3 code requires a real scoped Agent credential verified by Management→primary PostgreSQL**. It has no insecure legacy mode. Task13 does not upgrade, bootstrap, migrate or restart the existing four shared services. [Management acceptance](<management-backend-acceptance.md>) records the isolated scope; [Gate T12](<management-backend.md>) is mandatory before any separately authorized shared rollout.
 
-**Không phải production authentication.** Bearer chỉ được kiểm tra hình thức/non-empty; token bất kỳ hợp lệ về hình thức đều được nhận. `X-Server-ID`/`X-Agent-ID` tự khai báo, không chống giả mạo. Không gửi production key; chưa có credential provider, TLS, public/LAN ingress, HA/multi-worker, installer hay VM Telegraf đã nghiệm thu.
+No TLS/LAN/public ingress, real Grafana adapter identity, installer/renderer/VM Telegraf, HA/multi-worker or load qualification is claimed. HTTP lab signatures do not encrypt credentials. Do not widen bindings or edit firewall to make a VM example work.
 
-## Prerequisites, pins và dev checks
+## Pins and development
 
-- Windows Docker Desktop WSL2/Linux containers; PowerShell 7.3+ cho operator (native argument passing `Standard`). Các test host của implementation chạy PowerShell 5.1 với argument đơn giản, không phải hỗ trợ mọi lệnh runbook trên Legacy.
-- Giữ stack Bước 1 và [environment riêng](<../../.env>); **không đọc/in/copy đè credential**. [Template](<../../.env.example>) mô tả từng `INGEST_` input; app không tự load dotenv.
-- Python host 3.12.8; image `python:3.12.16-slim-bookworm@sha256:e697c81897302a4c4333bade000d98038fbb21eb064f8ee1fd42d02ebcd9d337`; uv **0.13.6**. Global uv không cần nâng: dùng wrapper bên dưới.
-- [Project pins](<../../services/ingestion-gateway/pyproject.toml>): FastAPI 0.162.0/Uvicorn 0.54.0, HTTPX 0.28.1, protobuf 7.36.2, cramjam 2.14.0, pydantic-settings 2.16.2, prometheus-client 0.26.0, anyio 4.15.1; dev pytest 9.2.0/pytest-asyncio 1.4.1/grpcio-tools 1.85.1/PyYAML 6.0.3. Không sửa tay [lock](<../../services/ingestion-gateway/uv.lock>) hoặc [generated protobuf](<../../services/ingestion-gateway/app/proto/remote_write_pb2.py>).
+Python host3.12; runtime `python:3.12.16-slim-bookworm@sha256:e697c81897302a4c4333bade000d98038fbb21eb064f8ee1fd42d02ebcd9d337`, uv0.13.6. Preserve [project pins](<../../services/ingestion-gateway/pyproject.toml>), [frozen lock](<../../services/ingestion-gateway/uv.lock>) and [generated protobuf](<../../services/ingestion-gateway/app/proto/remote_write_pb2.py>); no global upgrade or manual regeneration. The [Dockerfile](<../../services/ingestion-gateway/Dockerfile>) has explicit test and default nonroot runtime targets; runtime has no uv/test development environment.
 
-Chạy tại thư mục project Gateway; sau **mỗi** native command, dừng nếu exit khác 0:
+From Gateway, check each exit before continuing:
 
 ```powershell
 uv tool run --from uv==0.13.6 uv sync --frozen --group dev
-if ($LASTEXITCODE -ne 0) { throw 'Frozen sync failed' }
 uv tool run --from uv==0.13.6 uv lock --check
-if ($LASTEXITCODE -ne 0) { throw 'Lock check failed' }
-$before = (Get-FileHash -Algorithm SHA256 app/proto/remote_write_pb2.py).Hash
-uv tool run --from uv==0.13.6 uv run --frozen python -m grpc_tools.protoc -I app/proto --python_out=app/proto app/proto/remote_write.proto
-if ($LASTEXITCODE -ne 0) { throw 'Codegen failed' }
-$after = (Get-FileHash -Algorithm SHA256 app/proto/remote_write_pb2.py).Hash
-if ($before -ne $after) { throw 'Generated protobuf changed; review before continuing' }
-# Use a NEW nonexistent directory, never a shared directory pytest may clear.
-$base = Join-Path (Resolve-Path ../..).Path ('.superpowers/sdd/2026-10-31-ingestion-gateway/task8-operator-' + [guid]::NewGuid().ToString('N'))
-if (Test-Path -LiteralPath $base) { throw 'Basetemp collision' }
-$env:TASK7_RUN_COMPOSE_PATH_CHECK = '1'
-uv tool run --from uv==0.13.6 uv run --frozen pytest tests/unit tests/integration -q --basetemp $base
-if ($LASTEXITCODE -ne 0) { throw 'Host tests failed' }
-Remove-Item Env:TASK7_RUN_COMPOSE_PATH_CHECK
-# No INFRAPULSE_RUN_E2E flag: all five cases SKIP, even if Docker is unavailable.
-if (Test-Path -LiteralPath ($base + '-skip')) { throw 'Skip basetemp collision' }
-uv tool run --from uv==0.13.6 uv run --frozen pytest tests/e2e/test_remote_write.py -q --basetemp ($base + '-skip')
-if ($LASTEXITCODE -ne 0) { throw 'Default E2E collection failed' }
+# Set a NEW nonexistent basetemp under the ignored task workspace, never its root:
+uv tool run --from uv==0.13.6 uv run --frozen pytest -q --basetemp <new-private-task-temp-path>
 ```
 
-Host's default Admin pytest temp tree was inaccessible during implementation; no ACL repair is claimed. Keep fresh task-specific basetemp. The [hex fixture](<../../services/ingestion-gateway/tests/fixtures/remote_write_scalar.hex>) was hand-derived: one `__name__=up`, value `1.0`, timestamp `1000` ms; tests assert these independently before updating the fixture's metric/run_id/current timestamp for a real send.
+Leave historical `TASK7_RUN_COMPOSE_PATH_CHECK` **unset** (it consults real root dotenv). `TASK12_RUN_COMPOSE_PATH_CHECK=1` is a distinct generated-NONSECRET CLI-path regression. It is not permission to read live dotenv. Default tests never send E2E traffic: [all five retained cases](<../../services/ingestion-gateway/tests/e2e/test_remote_write.py>) skip unless exactly `INFRAPULSE_RUN_E2E=1`; [helper contracts](<../../services/ingestion-gateway/tests/unit/test_e2e_contract.py>) prove offline collection, retry bytes/deadline and whole absence windows. Host tests use fresh private basetemps, never clear shared/global temp or the evidence ledger.
 
-## Canonical Compose commands — approved plan erratum
+## Real credentials, identity and protocol
 
-**Root:** `C:\MF\VSCODE\InfraPulse`. Always retain `--env-file .env -f deploy/compose/compose.yaml`, **omit `--project-directory .`**. The original Task 7/8 plan snippets used that wrong override: it actually resolved context to `C:\MF\services\ingestion-gateway` and binds outside this repository, and the build failed. Default project directory must remain `deploy/compose`, so existing `../../services` and `../../observability` paths resolve correctly. Do not “fix” YAML paths, project `infrapulse`, networks or volume names. This is a CLI correction, not a rewrite of historical acceptance.
+Use [the Step4 provisioning contract](<../contracts/agent-provisioning.md>) to obtain the server-configured ingest origin and authoritative UUIDs. Required single-valued headers:
 
-Only perform runtime changes when authorized. Existing data/credential must remain intact. Complete the [Bước 1 bind-source preflight](<central-infrastructure.md#3-khởi-động-lần-đầu>) before Docker touches bind sources.
-
-```powershell
-$PSNativeCommandArgumentPassing = 'Standard'
-$dc = @('--env-file', '.env', '-f', 'deploy/compose/compose.yaml')
-function Assert-NativeExit { param([string]$Action)
-    if ($LASTEXITCODE -ne 0) { throw "$Action failed (exit $LASTEXITCODE)" }
-}
-docker compose @dc config --quiet
-Assert-NativeExit 'Compose config (no expanded credentials)'
-docker compose @dc build ingest
-Assert-NativeExit 'Frozen production build'
-docker compose @dc up -d --wait ingest
-Assert-NativeExit 'Gateway startup'
-docker compose @dc exec -T prometheus promtool check config /etc/prometheus/prometheus.yml
-Assert-NativeExit 'Prometheus config'
-# Only when the reviewed scrape config changed; no whole-stack recreation.
-docker compose @dc restart prometheus
-Assert-NativeExit 'Prometheus scrape reload via restart'
-docker compose @dc ps
-Assert-NativeExit 'Four-service health'
-Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8000/health/live -TimeoutSec 5
-Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8000/health/ready -TimeoutSec 5
-```
-
-Gateway: one worker, UID/GID `10001:10001`, read-only rootfs, `/tmp` tmpfs, cap drop ALL, no-new-privileges, 512 MiB/128 PIDs; no data/root-env/socket mounts. Only monitoring network and loopback host mapping `127.0.0.1:${INGEST_HOST_PORT:-8000}:8000`. Prometheus/PostgreSQL remain unpublished. Runtime inspect is useful but **not proof of native host isolation**; use a proxy-disabled finite native-host IPv4 probe and record any reachability as **GW-14 FAIL**, without silently changing firewall/binding.
-
-## Sender protocol and Telegraf example (NOT VM-tested)
-
-Required single-valued headers (duplicates/mixed-case duplicates are rejected):
-
-| Header | Lab value / constraint |
+| Header | Current Step3 contract |
 |---|---|
-| Authorization | `Bearer <dummy-lab-token>`; non-empty, max token 4096 bytes; no key validation |
-| X-Server-ID / X-Agent-ID | 1–128 ASCII bytes matching `[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}` |
+| Authorization | `Bearer <issued UUID.secret43 credential>`, `metrics:write`; never arbitrary dummy token |
+| X-Server-ID / X-Agent-ID | Optional comparison with trusted proof; malformed/duplicate400, mismatch403 |
 | Content-Type | `application/x-protobuf` |
-| Content-Encoding | `snappy` raw/block, not framed or an encoding chain |
+| Content-Encoding | raw/block `snappy`, not framed/gzip/encoding chain |
 | X-Prometheus-Remote-Write-Version | `0.1.0` |
-| User-Agent | non-empty, max 256 bytes |
+| User-Agent | nonempty, bounded256bytes |
 
-Illustrative Telegraf `outputs.http` only; **not tested on a Windows/Linux VM**, and no installer is supplied. `prometheusremotewrite` serializes protobuf and raw Snappy already; do not add gzip/framed compression. Metric names emitted by Telegraf depend on its inputs/mapping; this is not the fixed pytest metric.
+`POST /api/v1/ingest/remote-write` accepts the existing scalar Remote Write1.0 subset. Missing payload IDs are injected from the authenticated proof, matching labels retained, conflicting identity/duplicate labels/canonical series reject the **whole batch before forward**. No timestamp correction, finite-float coercion or partial ignore. Empty request/series, recursive unknown fields, metadata, exemplars/native histograms remain rejected. Never call NestJS with raw metrics or choose another Server ID in an installer.
 
-```toml
-[[outputs.http]]
-  url = "http://127.0.0.1:8000/api/v1/ingest/remote-write"
-  method = "POST"
-  timeout = "20s"
-  data_format = "prometheusremotewrite"
-  [outputs.http.headers]
-    Authorization = "Bearer dummy-lab-only-not-a-production-key"
-    X-Server-ID = "srv-lab"
-    X-Agent-ID = "agent-lab"
-    Content-Type = "application/x-protobuf"
-    Content-Encoding = "snappy"
-    X-Prometheus-Remote-Write-Version = "0.1.0"
-    User-Agent = "infrapulse-telegraf-lab/0.1.0"
-```
+Defaults remain compressed1MiB/decompressed8MiB,5000series,20000samples,64labels **after injection**,2inflight,rate10/s/burst20,age3600seconds/future120seconds/body5seconds. Name/label-name/value UTF8 caps256/128/1024. Connect/read/write/pool/upstream-total/readiness-total seconds2/10/10/1/12/1. A single admission lease includes verification; auth flood is bounded too. This is not a throughput qualification.
 
-Loopback above is the **sender's own host**. A VM cannot reach this host-bound Gateway through its own `127.0.0.1`; LAN/VM routing, TLS/auth and firewall design require separate approval. Do not widen binding to make this example work.
+Credential verification uses a dedicated signed Management pool/deadline≤2seconds,8KiB response. Whole-key fingerprint cache defaults1024/max10000 entries, positive TTL≤30seconds measured **before RPC**, further bounded by credential expiry. No sliding/negative/error cache or stale fallback. Wrong-secret/same-public-ID is a different fingerprint. Revoke/disable does not promise canceling already authenticated requests or deleting stored samples. Rotation overlap≤300seconds never extends an earlier cutoff.
 
-Missing `server_id`/`agent_id` labels are injected; matching labels retained; conflict, duplicate label names or duplicate canonical series reject **the entire request before forward**. No ID overwrite, timestamp correction or finite-float coercion. Empty WriteRequest/series, recursive unknown fields, metadata, exemplars and native histograms are unsupported and rejected, not silently dropped.
+| Result | Meaning / caller behavior |
+|---|---|
+| 204 | Auth+validation+Prometheus2xx, not just parse success; do not retry |
+| 400 | Invalid headers/body/wire/labels/timestamps or payload identity conflict; fix data |
+| 401 | Missing/malformed/expired/revoked/inactive credential; not merely Bearer syntax |
+| 403 | Valid optional identity claim conflicts with trusted proof |
+| 408/413/415 | Body deadline / byte-count limits / unsupported protocol |
+| 429 | Admission/rate; respect Retry-After inside a total caller deadline |
+| 502 | Upstream redirect/unexpected status |
+| 503 | Verification cold/expired+dependency unavailable, or upstream unavailable; no fallback |
+| 504 | Upstream transport/total deadline, uncertain partial outcome |
+| 500 | Sanitized internal failure; diagnose with request_id only |
 
-Defaults: compressed/decompressed `1048576`/`8388608` bytes, 5000 series, 20000 samples, 64 labels/series **after injection**, two inflight, rate 10/s/burst20, age3600s/future120s/body5s. Metric/label-name/value UTF-8 byte caps 256/128/1024; label values non-empty. Counts/timeouts positive and finite (only future skew can be zero). Connect/read/write/pool/upstream-total/readiness-total seconds: `2/10/10/1/12/1`.
+Gateway forwards once, does not redirect/retry/queue durable delivery or roll back TSDB. Uncertain partial writes are not exactly-once. The E2E sender alone retries transport/5xx/429 at most3attempts/20seconds, identical bytes/timestamps; exponential0.5s×2^attempt+jitter0–0.25, Retry-After1–60seconds cannot consume the remaining budget then start another attempt. This does not configure Telegraf delivery.
 
-## Status and retry matrix
+## Deployment, health and failure recovery
 
-| Result | Meaning | Sender action |
-|---|---|---|
-| 204 | Upstream returned 2xx, not merely Gateway parse success | Never retry |
-| 400 | Bad headers/body/wire/labels/timestamps, identity conflict, upstream400 | Fix data; do not retry unchanged |
-| 401 | Missing/malformed Bearer; not expired/revoked-key validation | Fix syntax; no automatic retry |
-| 408 | Body deadline | Fix sender/body behavior; E2E does not retry 4xx except429 |
-| 413 | Byte/count limits or upstream413 | Split/reduce payload, not unchanged retry |
-| 415 | Unsupported content/encoding/version | Fix protocol |
-| 429 | Admission or upstream rate limit | Respect Retry-After; bounded caller-only retry |
-| 502 | Upstream redirect/unexpected status, including upstream422 | Diagnose; bounded caller-only 5xx retry |
-| 503 | Upstream5xx or network/protocol failure (not timeout) | Bounded caller-only retry |
-| 504 | Upstream connect/read/write/pool timeout or total deadline | Outcome uncertain; retry may duplicate/encounter partial write |
-| 500 | Internal error, sanitized response | Diagnose, bounded caller-only retry |
+Canonical root anchor remains `docker compose --env-file .env -f deploy/compose/compose.yaml ...`, **never `--project-directory .`**. The wrong override resolves existing relative build/bind paths outside the repository; preserve paths/networks/volume names. Do not execute shared commands until separately approved and [Management Gate T12](<management-backend.md>) proves backup/destination, explicit owner/runtime/bootstrap roles, migrations/seed and signing trust. Never print expanded config, Config.Env, dotenv, raw logs or URL/key values.
 
-Gateway never retries, follows redirects, queues unbounded work, schedules background delivery or rolls back TSDB. **Partial writes/timeouts are uncertain; not transactional/exactly-once.** E2E sender retries only transport errors/5xx/429, max3 attempts/20s total, exponential `0.5s * 2^attempt + uniform(0,0.25)`; valid Retry-After on429 clamped1–60s and cannot consume remaining deadline then start another attempt. Identical bytes/timestamps are reused. This does not configure Telegraf's own delivery policy.
+Gateway source UUID is fixed in `INGEST_GATEWAY_ID`, equal to service-trust `subject` and seeded gateway source. `INGEST_SERVICE_KEY_ID` selects a local trusted public kid; private PEM only in `INGEST_SERVICE_SIGNING_KEY_FILE`. Real signer issuer/audience are `infrapulse-gateway` / `infrapulse-management-internal`, scopes in trust are `credentials:verify` and `status:write`. No service→Admin or browser trust bypass. Admin adapter has a distinct private key/trust map; see [Step6 contract](<../contracts/grafana-management-api.md>).
 
-## Linux tests and opt-in E2E (sequential, non-destructive)
+Runtime selects Uvicorn `--loop asyncio` explicitly rather than AUTO. Task13's isolated readiness/outage diagnosis measured delayed same-process Prometheus DNS under AUTO/uvloop and a fast stdlib-loop control; this is a measured mitigation, not proof of exact libuv saturation, universal resolver isolation, throughput, or a permanent flake fix. Current uninstrumented runtime outage/E2E receipts, not the diagnostic control alone, determine qualification. Pins, cache/deadline/retry policy and resource budgets are unchanged.
 
-From root; fresh build is essential because Task 7's image predates these tests. Use the exact pinned [Dockerfile](<../../services/ingestion-gateway/Dockerfile>) target `test`, narrow Gateway build context, frozen dev dependencies; no permanent test service, root-env bind or extra helper image.
+One worker UID/GID10001, readonly rootfs, `/tmp` tmpfs, capsALL dropped/no-new-privileges,512MiB/pids128/log10m×3; only monitoring network and signing-key bind, no DB/root-env/socket. Host publication stays loopback8000. Management is monitoring+database, container3000/loopback3001; Grafana3000 unchanged. Inspect alone is **not** native isolation proof; finite proxy-disabled loopback/nonloopbackIPv4/IPv6 probes must actually run. Report reachable exposure; do not silently remediate firewall or count inspect as a successful native probe.
 
-```powershell
-$dc = @('--env-file', '.env', '-f', 'deploy/compose/compose.yaml')
-$promId = docker compose @dc ps -q prometheus
-Assert-NativeExit 'Prometheus ID'
-if (-not $promId) { throw 'Prometheus is not running' }
-$nets = docker inspect --format '{{json .NetworkSettings.Networks}}' $promId | ConvertFrom-Json
-Assert-NativeExit 'Network inspect'
-$monitor = @($nets.PSObject.Properties | Where-Object { $_.Value.Aliases -contains 'prometheus' })
-if ($monitor.Count -ne 1) { throw 'Resolve exactly one network by Prometheus alias; do not guess' }
-$network = $monitor[0].Name
-docker build --target test -t infrapulse-ingest-test:task8 services/ingestion-gateway
-Assert-NativeExit 'Fresh Task 8 test image'
-docker run --rm --network $network infrapulse-ingest-test:task8 pytest tests/unit tests/integration --ignore=tests/integration/test_deployment_config.py -q
-Assert-NativeExit 'Linux application tests'
-# Only after that command has completed; no concurrent E2E runs.
-docker run --rm --network $network -e INFRAPULSE_RUN_E2E=1 infrapulse-ingest-test:task8 pytest tests/e2e/test_remote_write.py -m e2e -q -s
-Assert-NativeExit 'Remote Write E2E'
-```
+`/health/live` is process-only; `/health/ready` separately checks Prometheus and **signed** Management health with dedicated short-budget pools. Unhealthy does not trigger automatic Docker restart. Health/metrics bypass ingest rate/slots; no key is required for those public operational routes. Metrics have finite allowlisted labels, never IDs/key/run_id/URLs. Access logs disabled; HTTPX/httpcore restricted. Logs are finite event/code/status/count/timing fields, not headers/body/query/exception dumps.
 
-Only the repository config module is excluded on Linux: Compose/env repo is not copied into image; all config tests (including explicit opt-in canonical-path check) run on Windows. All other codec/admission/HTTP unit/integration tests run on both OSs. E2E endpoints default to `http://ingest:8000` and `http://prometheus:9090`, overridable via `E2E_GATEWAY_URL`/`E2E_PROMETHEUS_URL`; no token in CLI/env/URL. Module import/collection is network-free and five cases skip unless exactly `INFRAPULSE_RUN_E2E=1`.
+Status success records use actual Prometheus2xx receipt time, not sample time. Reporter10seconds, pool1/deadline2seconds, max1024Agents,256records/64KiB per chunk,4chunks/256KiB per immutable snapshot,3attempts, no raw metrics/key/durable queue. Boot UUID/time captured once; delayed registration never forges a fresh boot. Committed duplicate ack does not refresh heartbeat/coverage; digest mismatch409. Stale source>30seconds/gaps/never-seen yield Unknown, not fabricated Offline. [Telemetry contract](<../contracts/agent-provisioning.md#telemetry-is-observation-not-lifecycle-or-machine-power>) explains as_of/confidence and90/300 boundaries.
 
-Each case gets a fresh UUID run_id/current sample timestamp. Missing/matching IDs produce `42.25`/`43.25`; conflict99.0 must remain absent across the full30s query deadline (not just one empty result). Poll0.5s, presence deadline30s, scrape deadline90s. Successful console records expose only run_id/value/IDs/sample timestamp, never authorization or raw payload. Samples remain under normal retention; no deletion/admin API, Compose start/stop or production retry is performed by tests.
+Outage tests stop **only** the positively identified isolated Management dependency. Live positive cache remains usable until its original deadline; cold/expired503. Recovery must reverify and restore trustworthy observation coverage. Do not stop shared PostgreSQL/Prometheus/Gateway or alter public data for tests. Authorized rollback changes only reviewed schema-compatible app images/config and preserves DB/migrations/keys/volumes. Never `down -v`, prune/reset, TSDB deletion, disabling auth, broad grants, or assumed password rotation by dotenv edit.
 
-## Grafana, health, observability and recovery
+## Repeatable real E2E and historical evidence boundary
 
-1. Human logs into <http://127.0.0.1:3000> privately; use existing Explore datasource **Prometheus**, UID `infrapulse-prometheus`. Do not create a new datasource or expose9090.
-2. Immediately after a successful case, query `infrapulse_e2e_value{run_id="<actual-run-id>"}` in Explore, Run a **new instant query** within default5m lookback. Confirm `42.25` or `43.25` plus `server_id="srv-e2e"`, `agent_id="agent-e2e"`; record exact time/query/sanitized screenshot. Controller owns interactive UI during this task. API success alone cannot make GW-13 PASS. After5m, use a historical evaluation time/range covering the stored sample; do not claim an empty current instant query disproves ingestion.
-3. `/health/live` is process liveness; `/health/ready` checks upstream with a separate short-budget client and returns503 when upstream unavailable. Compose uses readiness but does not implement outage-driven restart loops. Health/metrics bypass ingestion rate/slot limits. Do **not** stop Prometheus to repeat an outage test; MockTransport tests cover it.
-4. `/metrics`: request totals by finite status, request durations by status_class, inflight gauge, rejections by finite reason, forward totals/upstream duration by finite result. No identity/token/URL/run_id labels. Scrape `up{job="ingestion-gateway"}` independently verifies scrape, not write success.
-5. Logs are allowlisted JSON timestamp/level/event/request_id/route/status/duration/counts/upstream_status/error_code, not headers/payload/query/exception bodies. Request IDs are server-generated. Uvicorn access logs disabled, HTTPX/httpcore restricted. Inspect only selected fields; never full env/config/log sharing.
+Use [Management test instructions](<../../services/management-backend/README.md#opted-real-cross-service-gate>) for `INFRAPULSE_RUN_MANAGEMENT_E2E=1 pnpm test:e2e`. It creates generated private Admin/Gateway pairs and trust **only** in its unique guarded fullstack, bootstraps/migrates/seeds its exact tmpfs DB, issues a real credential, and runs all five retained Gateway cases with `E2E_CREDENTIAL_FILE` pointing at a private fixture. Token contents are never argv/environment values. Missing fixture under opt-in is a prerequisite failure, not skipped/pass. Default import/collection performs no I/O. Native test Python can be selected by executable PATH only.
 
-```powershell
-docker compose @dc logs --no-color --tail 100 ingest
-Assert-NativeExit 'Read bounded Gateway logs (sanitize privately before sharing)'
-# Gateway-only rollback when authorized; leaves all Step 1 services/data intact.
-docker compose @dc stop ingest
-Assert-NativeExit 'Stop Gateway only'
-# Restore reviewed source/config/pin (not volumes), then build/start only Gateway.
-docker compose @dc build ingest
-Assert-NativeExit 'Build reviewed Gateway'
-docker compose @dc up -d --no-deps --wait ingest
-Assert-NativeExit 'Restore Gateway (requires existing Prometheus ready)'
-```
+Independent [scalar fixture](<../../services/ingestion-gateway/tests/fixtures/remote_write_scalar.hex>) is hand-derived `__name__=up`,value1,timestamp1000ms. Tests check those constants before changing unique run_id/value/time. Real cross-service cases assert42.25, trusted UUID labels and **`timestamp(metric)`** stored timestamp (instant-vector evaluation time is not sample time), full30second no-forward windows for rejected runs and commit+30second revoke bound. Fresh requests/queries have finite deadlines; no TSDB deletion. Generated test project teardown includes `--profile fullstack`, exact run/database labels/marker and zero-owned-resource receipts, not default down that can omit profiled apps.
 
-Do not `down -v`, prune/reset Docker, delete samples or rotate credential by editing dotenv. Preserve baseline IDs/volume names and keep TSDB data; Gateway has no volume. Full stack shutdown via [Bước 1 runbook](<central-infrastructure.md>) now also affects Gateway and needs separate operator intent. Auth/TLS/LAN remediation, Telegraf VM, unsupported extensions, HA/load/long-term production readiness remain separate work, not hidden acceptance passes.
+Linux integration uses a parent-owned guarded DB with exact `INFRAPULSE_TEST_DB_EXTERNAL=1`, run ID and private URL-file mounts; no Docker socket/lifecycle in the child. Test images include current source; repository-only static tests use a finite safe metadata projection without real dotenv. A successful sample/query is **not** real Grafana login, Step6 stable subject, installer or VM proof. Existing Step1 CI-01 FAIL/CI-07+09 PARTIAL and historical Step2 limits remain in their original reports. No later fixture test retroactively closes them.

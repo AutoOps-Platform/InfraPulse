@@ -5,7 +5,8 @@ from types import MappingProxyType
 
 ERROR_MESSAGES = MappingProxyType({
     "invalid_authorization": "A valid Bearer authorization header is required.",
-    "invalid_identity": "Valid server and agent identity headers are required.",
+    "invalid_identity": "A supplied identity header is invalid.",
+    "identity_mismatch": "Supplied identity does not match the verified credential.",
     "unsupported_media": "The media type, encoding, or protocol version is unsupported.",
     "invalid_protocol_header": "A required protocol header is invalid.",
     "invalid_content_length": "Content-Length is invalid.",
@@ -29,6 +30,7 @@ ERROR_MESSAGES = MappingProxyType({
     "upstream_too_large": "The upstream rejected the payload size.",
     "upstream_rate_limited": "The upstream rate limit was exceeded.",
     "upstream_unavailable": "The upstream is unavailable.",
+    "credential_verification_unavailable": "Credential verification is unavailable.",
     "upstream_timeout": "The upstream deadline or timeout was exceeded.",
     "upstream_bad_status": "The upstream returned an unsupported status.",
     "internal_error": "An internal gateway error occurred.",
