@@ -1,0 +1,1254 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "description": "InfraPulse Windows host metrics, adapted from Grafana dashboard 3563 revision 1: https://grafana.com/grafana/dashboards/3563-windows-host-overview/ . Expected from Step4 Windows Telegraf templates; Windows runtime not yet validated. Identity filters are not RBAC; os is self-declared.",
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "gnetId": 3563,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    {
+      "url": "https://grafana.com/grafana/dashboards/3563-windows-host-overview/",
+      "icon": "external link",
+      "type": "link",
+      "targetBlank": true,
+      "keepTime": false,
+      "asDropdown": false,
+      "title": "Source: Windows Host Overview (3563 rev1)",
+      "includeVars": false,
+      "tags": []
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Uptime",
+      "description": "Current System Up Time in seconds. Instant query; missing current samples are not replaced with historical values.",
+      "type": "stat",
+      "pluginVersion": "13.3.0",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infrapulse-prometheus"
+      },
+      "gridPos": {
+        "y": 0,
+        "w": 5,
+        "h": 4,
+        "x": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "result": {
+                  "color": "gray",
+                  "text": "No data",
+                  "index": 0
+                },
+                "match": "null"
+              },
+              "type": "special"
+            }
+          ],
+          "noValue": "No data",
+          "unit": "s",
+          "min": 0,
+          "thresholds": {
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              }
+            ],
+            "mode": "absolute"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "graphMode": "none",
+        "percentChangeColorMode": "standard",
+        "wideLayout": true,
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "showPercentChange": false,
+        "orientation": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infrapulse-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max(win_system_System_Up_Time{os=\"windows\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\"})",
+          "format": "time_series",
+          "instant": true,
+          "range": false,
+          "interval": "30s",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "CPU used",
+      "description": "Total processor utilization, 0–100%. Warning at 85%; critical at 95%. PDH percentage is already a gauge, not a rate.",
+      "type": "stat",
+      "pluginVersion": "13.3.0",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infrapulse-prometheus"
+      },
+      "gridPos": {
+        "y": 0,
+        "w": 5,
+        "h": 4,
+        "x": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "result": {
+                  "color": "gray",
+                  "text": "No data",
+                  "index": 0
+                },
+                "match": "null"
+              },
+              "type": "special"
+            }
+          ],
+          "noValue": "No data",
+          "unit": "percent",
+          "min": 0,
+          "thresholds": {
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 85,
+                "color": "yellow"
+              },
+              {
+                "value": 95,
+                "color": "red"
+              }
+            ],
+            "mode": "absolute"
+          },
+          "max": 100,
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "graphMode": "none",
+        "percentChangeColorMode": "standard",
+        "wideLayout": true,
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "showPercentChange": false,
+        "orientation": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infrapulse-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max(win_cpu_Percent_Processor_Time{os=\"windows\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\",instance=\"_Total\"})",
+          "format": "time_series",
+          "instant": true,
+          "range": false,
+          "interval": "30s",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Memory used",
+      "description": "Native inputs.mem utilization, 0–100%. Warning at 90%; critical at 95%.",
+      "type": "stat",
+      "pluginVersion": "13.3.0",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infrapulse-prometheus"
+      },
+      "gridPos": {
+        "y": 0,
+        "w": 5,
+        "h": 4,
+        "x": 10
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "result": {
+                  "color": "gray",
+                  "text": "No data",
+                  "index": 0
+                },
+                "match": "null"
+              },
+              "type": "special"
+            }
+          ],
+          "noValue": "No data",
+          "unit": "percent",
+          "min": 0,
+          "thresholds": {
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 90,
+                "color": "yellow"
+              },
+              {
+                "value": 95,
+                "color": "red"
+              }
+            ],
+            "mode": "absolute"
+          },
+          "max": 100,
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "graphMode": "none",
+        "percentChangeColorMode": "standard",
+        "wideLayout": true,
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "showPercentChange": false,
+        "orientation": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infrapulse-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max(mem_used_percent{os=\"windows\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\"})",
+          "format": "time_series",
+          "instant": true,
+          "range": false,
+          "interval": "30s",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Least free disk space",
+      "description": "Minimum free percentage across selected logical volumes only, excluding _Total. Red below 10%; amber from 10% to below 20%; green from 20%.",
+      "type": "stat",
+      "pluginVersion": "13.3.0",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infrapulse-prometheus"
+      },
+      "gridPos": {
+        "y": 0,
+        "w": 5,
+        "h": 4,
+        "x": 15
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "result": {
+                  "color": "gray",
+                  "text": "No data",
+                  "index": 0
+                },
+                "match": "null"
+              },
+              "type": "special"
+            }
+          ],
+          "noValue": "No data",
+          "unit": "percent",
+          "min": 0,
+          "thresholds": {
+            "steps": [
+              {
+                "value": null,
+                "color": "red"
+              },
+              {
+                "value": 10,
+                "color": "yellow"
+              },
+              {
+                "value": 20,
+                "color": "green"
+              }
+            ],
+            "mode": "absolute"
+          },
+          "max": 100,
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "graphMode": "none",
+        "percentChangeColorMode": "standard",
+        "wideLayout": true,
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "showPercentChange": false,
+        "orientation": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infrapulse-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "min(win_disk_Percent_Free_Space{os=\"windows\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\",instance=~\"${volume:regex}\",instance!=\"\",instance!=\"_Total\"})",
+          "format": "time_series",
+          "instant": true,
+          "range": false,
+          "interval": "30s",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 200,
+      "title": "Metrics sample age",
+      "description": "Age in seconds of the latest original uptime sample found in a 24h subquery window with 1m steps plus Prometheus selector lookback (normally 5m). Original samples can remain visible for roughly 24h+5m. Warning at 90s; critical at 300s. This is sample freshness, NOT Online status or backend health. No retained sample = No data.",
+      "type": "stat",
+      "pluginVersion": "13.3.0",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infrapulse-prometheus"
+      },
+      "gridPos": {
+        "y": 0,
+        "w": 4,
+        "h": 4,
+        "x": 20
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "result": {
+                  "color": "gray",
+                  "text": "No data",
+                  "index": 0
+                },
+                "match": "null"
+              },
+              "type": "special"
+            }
+          ],
+          "noValue": "No data",
+          "unit": "s",
+          "min": 0,
+          "thresholds": {
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 90,
+                "color": "yellow"
+              },
+              {
+                "value": 300,
+                "color": "red"
+              }
+            ],
+            "mode": "absolute"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "graphMode": "none",
+        "percentChangeColorMode": "standard",
+        "wideLayout": true,
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "showPercentChange": false,
+        "orientation": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infrapulse-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "clamp_min(time() - max(max_over_time(timestamp(win_system_System_Up_Time{os=\"windows\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\"})[24h:1m])), 0)",
+          "format": "time_series",
+          "instant": true,
+          "range": false,
+          "interval": "30s",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "CPU utilization",
+      "description": "Total, user and privileged processor time are already PDH percentages; do not sum total with its breakdown or apply rate().",
+      "type": "timeseries",
+      "pluginVersion": "13.3.0",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infrapulse-prometheus"
+      },
+      "gridPos": {
+        "y": 4,
+        "w": 12,
+        "h": 8,
+        "x": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [
+            {
+              "options": {
+                "result": {
+                  "color": "gray",
+                  "text": "No data",
+                  "index": 0
+                },
+                "match": "null"
+              },
+              "type": "special"
+            }
+          ],
+          "noValue": "No data",
+          "unit": "percent",
+          "min": 0,
+          "thresholds": {
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 85,
+                "color": "yellow"
+              },
+              {
+                "value": 95,
+                "color": "red"
+              }
+            ],
+            "mode": "absolute"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisColorMode": "text",
+            "fillOpacity": 10,
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "showPoints": "never",
+            "gradientMode": "none",
+            "pointSize": 5,
+            "lineInterpolation": "linear",
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "lineWidth": 1,
+            "barAlignment": 0,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "drawStyle": "line",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "max": 100
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list"
+        },
+        "tooltip": {
+          "sort": "none",
+          "hideZeros": false,
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infrapulse-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max(win_cpu_Percent_Processor_Time{os=\"windows\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\",instance=\"_Total\"})",
+          "format": "time_series",
+          "instant": false,
+          "range": true,
+          "interval": "30s",
+          "legendFormat": "Total",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infrapulse-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max(win_cpu_Percent_User_Time{os=\"windows\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\",instance=\"_Total\"})",
+          "format": "time_series",
+          "instant": false,
+          "range": true,
+          "interval": "30s",
+          "legendFormat": "User",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infrapulse-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max(win_cpu_Percent_Privileged_Time{os=\"windows\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\",instance=\"_Total\"})",
+          "format": "time_series",
+          "instant": false,
+          "range": true,
+          "interval": "30s",
+          "legendFormat": "Privileged",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Memory utilization",
+      "description": "Native inputs.mem used percentage, 0–100%; gaps remain gaps.",
+      "type": "timeseries",
+      "pluginVersion": "13.3.0",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infrapulse-prometheus"
+      },
+      "gridPos": {
+        "y": 4,
+        "w": 12,
+        "h": 8,
+        "x": 12
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [
+            {
+              "options": {
+                "result": {
+                  "color": "gray",
+                  "text": "No data",
+                  "index": 0
+                },
+                "match": "null"
+              },
+              "type": "special"
+            }
+          ],
+          "noValue": "No data",
+          "unit": "percent",
+          "min": 0,
+          "thresholds": {
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 90,
+                "color": "yellow"
+              },
+              {
+                "value": 95,
+                "color": "red"
+              }
+            ],
+            "mode": "absolute"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisColorMode": "text",
+            "fillOpacity": 10,
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "showPoints": "never",
+            "gradientMode": "none",
+            "pointSize": 5,
+            "lineInterpolation": "linear",
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "lineWidth": 1,
+            "barAlignment": 0,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "drawStyle": "line",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "max": 100
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list"
+        },
+        "tooltip": {
+          "sort": "none",
+          "hideZeros": false,
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infrapulse-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max(mem_used_percent{os=\"windows\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\"})",
+          "format": "time_series",
+          "instant": false,
+          "range": true,
+          "interval": "30s",
+          "legendFormat": "Memory used",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "title": "Logical disk used",
+      "description": "100 minus PDH free-space percentage, separately for each selected logical volume. _Total excluded. Critical at 90% used.",
+      "type": "timeseries",
+      "pluginVersion": "13.3.0",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infrapulse-prometheus"
+      },
+      "gridPos": {
+        "y": 12,
+        "w": 12,
+        "h": 8,
+        "x": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [
+            {
+              "options": {
+                "result": {
+                  "color": "gray",
+                  "text": "No data",
+                  "index": 0
+                },
+                "match": "null"
+              },
+              "type": "special"
+            }
+          ],
+          "noValue": "No data",
+          "unit": "percent",
+          "min": 0,
+          "thresholds": {
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 80,
+                "color": "yellow"
+              },
+              {
+                "value": 90,
+                "color": "red"
+              }
+            ],
+            "mode": "absolute"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisColorMode": "text",
+            "fillOpacity": 10,
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "showPoints": "never",
+            "gradientMode": "none",
+            "pointSize": 5,
+            "lineInterpolation": "linear",
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "lineWidth": 1,
+            "barAlignment": 0,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "drawStyle": "line",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "max": 100
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list"
+        },
+        "tooltip": {
+          "sort": "none",
+          "hideZeros": false,
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infrapulse-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "100 - win_disk_Percent_Free_Space{os=\"windows\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\",instance=~\"${volume:regex}\",instance!=\"\",instance!=\"_Total\"}",
+          "format": "time_series",
+          "instant": false,
+          "range": true,
+          "interval": "30s",
+          "legendFormat": "{{instance}} used",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 201,
+      "title": "Logical disk free bytes",
+      "description": "Free Megabytes converted using 1024 × 1024, separately per selected logical volume. _Total excluded.",
+      "type": "timeseries",
+      "pluginVersion": "13.3.0",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infrapulse-prometheus"
+      },
+      "gridPos": {
+        "y": 12,
+        "w": 12,
+        "h": 8,
+        "x": 12
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [
+            {
+              "options": {
+                "result": {
+                  "color": "gray",
+                  "text": "No data",
+                  "index": 0
+                },
+                "match": "null"
+              },
+              "type": "special"
+            }
+          ],
+          "noValue": "No data",
+          "unit": "bytes",
+          "min": 0,
+          "thresholds": {
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              }
+            ],
+            "mode": "absolute"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisColorMode": "text",
+            "fillOpacity": 10,
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "showPoints": "never",
+            "gradientMode": "none",
+            "pointSize": 5,
+            "lineInterpolation": "linear",
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "lineWidth": 1,
+            "barAlignment": 0,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "drawStyle": "line",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list"
+        },
+        "tooltip": {
+          "sort": "none",
+          "hideZeros": false,
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infrapulse-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "win_disk_Free_Megabytes{os=\"windows\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\",instance=~\"${volume:regex}\",instance!=\"\",instance!=\"_Total\"} * 1024 * 1024",
+          "format": "time_series",
+          "instant": false,
+          "range": true,
+          "interval": "30s",
+          "legendFormat": "{{instance}} free",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 170,
+      "title": "Network throughput by interface",
+      "description": "Native inputs.net cumulative byte counters converted with rate over $__rate_interval. Received and sent bytes/sec remain separate per interface; physical and virtual interfaces are never summed or stacked.",
+      "type": "timeseries",
+      "pluginVersion": "13.3.0",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infrapulse-prometheus"
+      },
+      "gridPos": {
+        "y": 20,
+        "w": 24,
+        "h": 8,
+        "x": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [
+            {
+              "options": {
+                "result": {
+                  "color": "gray",
+                  "text": "No data",
+                  "index": 0
+                },
+                "match": "null"
+              },
+              "type": "special"
+            }
+          ],
+          "noValue": "No data",
+          "unit": "Bps",
+          "min": 0,
+          "thresholds": {
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              }
+            ],
+            "mode": "absolute"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisColorMode": "text",
+            "fillOpacity": 10,
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "showPoints": "never",
+            "gradientMode": "none",
+            "pointSize": 5,
+            "lineInterpolation": "linear",
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "lineWidth": 1,
+            "barAlignment": 0,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "drawStyle": "line",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list"
+        },
+        "tooltip": {
+          "sort": "none",
+          "hideZeros": false,
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infrapulse-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "rate(net_bytes_recv{os=\"windows\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\",interface=~\"${interface:regex}\",interface!=\"\"}[$__rate_interval])",
+          "format": "time_series",
+          "instant": false,
+          "range": true,
+          "interval": "30s",
+          "legendFormat": "{{interface}} received",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infrapulse-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "rate(net_bytes_sent{os=\"windows\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\",interface=~\"${interface:regex}\",interface!=\"\"}[$__rate_interval])",
+          "format": "time_series",
+          "instant": false,
+          "range": true,
+          "interval": "30s",
+          "legendFormat": "{{interface}} sent",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 900,
+      "title": "Scope, freshness and source",
+      "type": "text",
+      "pluginVersion": "13.3.0",
+      "gridPos": {
+        "y": 28,
+        "w": 24,
+        "h": 6,
+        "x": 0
+      },
+      "options": {
+        "content": "Select one **server_id** and one **agent_id**; then choose logical volumes and interfaces. These filters reduce accidental identity mixing; **they are not RBAC**. Gateway credentials bind the IDs; `os=\"windows\"` is self-declared, not inventory-authenticated. No hostnames or sample IDs are saved in this dashboard.\n\n**Metrics sample age is not Online status or backend health.** It retains the latest original uptime timestamp in a 24h subquery window with 1m steps plus Prometheus selector lookback (normally 5m); amber ≥90s, red ≥300s, and No data if none is retained. This boundary differs from the raw 24h range used by Metrics Stale. Current overview stats use instant queries; historical charts preserve gaps. Disabled/absent collectors produce No data, not zero.\n\nExpected from the InfraPulse Windows Telegraf profile (15s default collection; 30s dashboard refresh). **Windows runtime metrics and Grafana rendering have not been validated.** Network rates are shown per interface without combining physical and virtual NICs.\n\nAdapted from [Windows Host Overview — Grafana dashboard 3563, revision 1](https://grafana.com/grafana/dashboards/3563-windows-host-overview/): overview → CPU → memory → logical disks → network. Only built-in stat, timeseries and text panels are used.",
+        "mode": "markdown"
+      }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": [
+    "InfraPulse",
+    "windows",
+    "telegraf"
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "server_id",
+        "label": "Server ID",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "infrapulse-prometheus"
+        },
+        "definition": "label_values(win_system_System_Up_Time{os=\"windows\",server_id!=\"\",agent_id!=\"\"}, server_id)",
+        "query": {
+          "refId": "PrometheusVariableQueryEditor-VariableQuery",
+          "query": "label_values(win_system_System_Up_Time{os=\"windows\",server_id!=\"\",agent_id!=\"\"}, server_id)"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "hide": 0,
+        "regex": "",
+        "multi": false,
+        "includeAll": false,
+        "options": [],
+        "current": {},
+        "skipUrlSync": false
+      },
+      {
+        "name": "agent_id",
+        "label": "Agent ID",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "infrapulse-prometheus"
+        },
+        "definition": "label_values(win_system_System_Up_Time{os=\"windows\",server_id=~\"${server_id:regex}\",server_id!=\"\",agent_id!=\"\"}, agent_id)",
+        "query": {
+          "refId": "PrometheusVariableQueryEditor-VariableQuery",
+          "query": "label_values(win_system_System_Up_Time{os=\"windows\",server_id=~\"${server_id:regex}\",server_id!=\"\",agent_id!=\"\"}, agent_id)"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "hide": 0,
+        "regex": "",
+        "multi": false,
+        "includeAll": false,
+        "options": [],
+        "current": {},
+        "skipUrlSync": false
+      },
+      {
+        "name": "volume",
+        "label": "Logical volume",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "infrapulse-prometheus"
+        },
+        "definition": "label_values(win_disk_Percent_Free_Space{os=\"windows\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\",instance!=\"\",instance!=\"_Total\"}, instance)",
+        "query": {
+          "refId": "PrometheusVariableQueryEditor-VariableQuery",
+          "query": "label_values(win_disk_Percent_Free_Space{os=\"windows\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\",instance!=\"\",instance!=\"_Total\"}, instance)"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "hide": 0,
+        "regex": "",
+        "multi": true,
+        "includeAll": true,
+        "options": [],
+        "current": {
+          "selected": true,
+          "value": "$__all",
+          "text": "All"
+        },
+        "skipUrlSync": false,
+        "allValue": ".*"
+      },
+      {
+        "name": "interface",
+        "label": "Interface",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "infrapulse-prometheus"
+        },
+        "definition": "label_values(net_bytes_recv{os=\"windows\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\",interface!=\"\"}, interface)",
+        "query": {
+          "refId": "PrometheusVariableQueryEditor-VariableQuery",
+          "query": "label_values(net_bytes_recv{os=\"windows\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\",interface!=\"\"}, interface)"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "hide": 0,
+        "regex": "",
+        "multi": true,
+        "includeAll": true,
+        "options": [],
+        "current": {
+          "selected": true,
+          "value": "$__all",
+          "text": "All"
+        },
+        "skipUrlSync": false,
+        "allValue": ".*"
+      }
+    ]
+  },
+  "time": {
+    "to": "now",
+    "from": "now-1h"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "30s",
+      "1m",
+      "5m",
+      "15m"
+    ]
+  },
+  "timezone": "browser",
+  "title": "InfraPulse / Windows Host",
+  "uid": "infrapulse-windows-host",
+  "version": 1,
+  "weekStart": ""
+}

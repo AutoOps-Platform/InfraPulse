@@ -1,0 +1,297 @@
+{
+  "prometheus": {
+    "observed_at": "2026-11-02T12:36:44.225476+00:00",
+    "server_id": "76c61c9a-e845-474e-932b-c90b6ee86920",
+    "agent_id": "4e7ea3d4-da72-49ee-a35a-539d3e6865e2",
+    "series_count": 300,
+    "metric_name_count": 90,
+    "required_groups_present": {
+      "cpu": true,
+      "memory": true,
+      "disk": true,
+      "network": true,
+      "uptime": true
+    },
+    "first_sample_timestamp": 1793622975.832,
+    "second_sample_timestamp": 1793622990.352,
+    "timestamps_advanced": true,
+    "examples": {
+      "cpu_usage_active": {
+        "labels": {
+          "__name__": "cpu_usage_active",
+          "agent_id": "4e7ea3d4-da72-49ee-a35a-539d3e6865e2",
+          "cpu": "cpu-total",
+          "host": "vm-1",
+          "os": "linux",
+          "server_id": "76c61c9a-e845-474e-932b-c90b6ee86920"
+        },
+        "value": "2.4770953512033413"
+      },
+      "mem_used_percent": {
+        "labels": {
+          "__name__": "mem_used_percent",
+          "agent_id": "4e7ea3d4-da72-49ee-a35a-539d3e6865e2",
+          "host": "vm-1",
+          "os": "linux",
+          "server_id": "76c61c9a-e845-474e-932b-c90b6ee86920"
+        },
+        "value": "24.374963915390328"
+      },
+      "disk_used_percent": {
+        "labels": {
+          "__name__": "disk_used_percent",
+          "agent_id": "4e7ea3d4-da72-49ee-a35a-539d3e6865e2",
+          "device": "devtmpfs",
+          "fstype": "devtmpfs",
+          "host": "vm-1",
+          "mode": "rw",
+          "os": "linux",
+          "path": "/dev",
+          "server_id": "76c61c9a-e845-474e-932b-c90b6ee86920"
+        },
+        "value": "0"
+      },
+      "net_bytes_recv": {
+        "labels": {
+          "__name__": "net_bytes_recv",
+          "agent_id": "4e7ea3d4-da72-49ee-a35a-539d3e6865e2",
+          "host": "vm-1",
+          "interface": "br-6cd1cebce738",
+          "os": "linux",
+          "server_id": "76c61c9a-e845-474e-932b-c90b6ee86920"
+        },
+        "value": "392"
+      },
+      "system_uptime": {
+        "labels": {
+          "__name__": "system_uptime",
+          "agent_id": "4e7ea3d4-da72-49ee-a35a-539d3e6865e2",
+          "host": "vm-1",
+          "os": "linux",
+          "server_id": "76c61c9a-e845-474e-932b-c90b6ee86920"
+        },
+        "value": "12006"
+      }
+    },
+    "all_metric_names": [
+      "cpu_usage_active",
+      "cpu_usage_guest",
+      "cpu_usage_guest_nice",
+      "cpu_usage_idle",
+      "cpu_usage_iowait",
+      "cpu_usage_irq",
+      "cpu_usage_nice",
+      "cpu_usage_softirq",
+      "cpu_usage_steal",
+      "cpu_usage_system",
+      "cpu_usage_user",
+      "disk_free",
+      "disk_inodes_free",
+      "disk_inodes_total",
+      "disk_inodes_used",
+      "disk_inodes_used_percent",
+      "disk_total",
+      "disk_used",
+      "disk_used_percent",
+      "diskio_io_await",
+      "diskio_io_svctm",
+      "diskio_io_time",
+      "diskio_io_util",
+      "diskio_iops_in_progress",
+      "diskio_merged_reads",
+      "diskio_merged_writes",
+      "diskio_read_bytes",
+      "diskio_read_time",
+      "diskio_reads",
+      "diskio_weighted_io_time",
+      "diskio_write_bytes",
+      "diskio_write_time",
+      "diskio_writes",
+      "mem_active",
+      "mem_available",
+      "mem_available_percent",
+      "mem_buffered",
+      "mem_cached",
+      "mem_commit_limit",
+      "mem_committed_as",
+      "mem_dirty",
+      "mem_free",
+      "mem_high_free",
+      "mem_high_total",
+      "mem_huge_page_size",
+      "mem_huge_pages_free",
+      "mem_huge_pages_total",
+      "mem_inactive",
+      "mem_low_free",
+      "mem_low_total",
+      "mem_mapped",
+      "mem_page_tables",
+      "mem_shared",
+      "mem_slab",
+      "mem_sreclaimable",
+      "mem_sunreclaim",
+      "mem_swap_cached",
+      "mem_swap_free",
+      "mem_swap_total",
+      "mem_total",
+      "mem_used",
+      "mem_used_percent",
+      "mem_vmalloc_chunk",
+      "mem_vmalloc_total",
+      "mem_vmalloc_used",
+      "mem_write_back",
+      "mem_write_back_tmp",
+      "net_bytes_recv",
+      "net_bytes_sent",
+      "net_drop_in",
+      "net_drop_out",
+      "net_err_in",
+      "net_err_out",
+      "net_packets_recv",
+      "net_packets_sent",
+      "net_speed",
+      "swap_free",
+      "swap_in",
+      "swap_out",
+      "swap_total",
+      "swap_used",
+      "swap_used_percent",
+      "system_load1",
+      "system_load15",
+      "system_load5",
+      "system_n_cpus",
+      "system_n_physical_cpus",
+      "system_n_unique_users",
+      "system_n_users",
+      "system_uptime"
+    ]
+  },
+  "config_update": {
+    "before": {
+      "release": "r-20261102123200-fe0ff684911bc4f5",
+      "server_id": "76c61c9a-e845-474e-932b-c90b6ee86920",
+      "agent_id": "4e7ea3d4-da72-49ee-a35a-539d3e6865e2",
+      "profile_version_id": "7d4fb804-276e-40c0-aa2c-0ebb618eb050"
+    },
+    "after": {
+      "release": "r-20261102123626-ebe941d7354c65dd",
+      "server_id": "76c61c9a-e845-474e-932b-c90b6ee86920",
+      "agent_id": "4e7ea3d4-da72-49ee-a35a-539d3e6865e2",
+      "profile_version_id": "7d4fb804-276e-40c0-aa2c-0ebb618eb050",
+      "report_pending": false,
+      "last_report_result": "applied"
+    },
+    "binding_preserved": true,
+    "applied_report_acknowledged": true
+  },
+  "security_checks": {
+    "untrusted_ca_rejected": true,
+    "control_requires_credential": true,
+    "control_tls_does_not_expose_admin": true,
+    "gateway_rejects_invalid_key": true,
+    "var_log_os_permissions_unchanged": true
+  },
+  "backend": {
+    "observed_at": "2026-11-02T12:37:20.186Z",
+    "server_id": "76c61c9a-e845-474e-932b-c90b6ee86920",
+    "agent_id": "4e7ea3d4-da72-49ee-a35a-539d3e6865e2",
+    "lifecycle": "active",
+    "last_applied_profile_version_id": "7d4fb804-276e-40c0-aa2c-0ebb618eb050",
+    "last_config_report_result": "applied",
+    "last_metric_seen_at": "2026-11-02T12:37:14.033Z",
+    "telemetry": {
+      "status": "Online",
+      "confidence_reason": "recent_success",
+      "source_health": "healthy",
+      "last_metric_seen_at": "2026-11-02T12:37:14.033Z",
+      "status_as_of": "2026-11-02T12:37:18.047Z"
+    }
+  },
+  "telegraf_provenance": {
+    "version": "1.38.2",
+    "archive_url": "https://dl.influxdata.com/telegraf/releases/telegraf-1.38.2_linux_amd64.tar.gz",
+    "official_archive_sha256": "b2306602441bd93ea767fb78efc0d0d477c9898cf6396a4afcd085e8420d2030",
+    "actual_archive_sha256": "b2306602441bd93ea767fb78efc0d0d477c9898cf6396a4afcd085e8420d2030",
+    "extracted_binary_sha256": "08962dbb96e8528d0b634df8798a01a08a595f8d454d5b0f23a176b38ad76d55"
+  },
+  "regression_suite": "test_directory_symlinks_remain_forbidden (test_linux_paths.LinuxPrivateLogPaths.test_directory_symlinks_remain_forbidden) ... ok\ntest_group_writable_directories_remain_forbidden (test_linux_paths.LinuxPrivateLogPaths.test_group_writable_directories_remain_forbidden) ... ok\ntest_log_ancestors_are_safe_on_standard_ubuntu (test_linux_paths.LinuxPrivateLogPaths.test_log_ancestors_are_safe_on_standard_ubuntu) ... ok\ntest_systemd_writable_path_matches_private_log_directory (test_linux_paths.LinuxPrivateLogPaths.test_systemd_writable_path_matches_private_log_directory) ... ok\n\n----------------------------------------------------------------------\nRan 4 tests in 0.008s\n\nOK\n",
+  "snapshot_at": "2026-11-02T12:39:45.436214+00:00",
+  "compose_project": "infrapulse-vm1-step4",
+  "containers": [
+    {
+      "Service": "ingest",
+      "State": "running",
+      "Health": "healthy",
+      "Publishers": [
+        {
+          "URL": "127.0.0.1",
+          "TargetPort": 8000,
+          "PublishedPort": 8443,
+          "Protocol": "tcp"
+        }
+      ]
+    },
+    {
+      "Service": "management",
+      "State": "running",
+      "Health": "healthy",
+      "Publishers": [
+        {
+          "URL": "127.0.0.1",
+          "TargetPort": 3000,
+          "PublishedPort": 3001,
+          "Protocol": "tcp"
+        },
+        {
+          "URL": "127.0.0.1",
+          "TargetPort": 3443,
+          "PublishedPort": 3443,
+          "Protocol": "tcp"
+        }
+      ]
+    },
+    {
+      "Service": "postgres",
+      "State": "running",
+      "Health": "healthy",
+      "Publishers": [
+        {
+          "URL": "",
+          "TargetPort": 5432,
+          "PublishedPort": 0,
+          "Protocol": "tcp"
+        }
+      ]
+    },
+    {
+      "Service": "prometheus",
+      "State": "running",
+      "Health": "healthy",
+      "Publishers": [
+        {
+          "URL": "127.0.0.1",
+          "TargetPort": 9090,
+          "PublishedPort": 9090,
+          "Protocol": "tcp"
+        }
+      ]
+    }
+  ],
+  "service_properties": [
+    "NRestarts=0",
+    "ExecMainStatus=0",
+    "MemoryCurrent=30240768",
+    "ActiveState=active",
+    "SubState=running"
+  ],
+  "resources": {
+    "memory": "               total        used        free      shared  buff/cache   available\nMem:            3856         959         465          26        2760        2897\nSwap:              0           0           0\n",
+    "disk": "Filesystem      Size  Used Avail Use% Mounted on\n/dev/root        29G  7.6G   21G  28% /\n"
+  },
+  "private_file_modes": {
+    "/opt/infrapulse-agent/current/api-key": "0o600",
+    "/opt/infrapulse-agent/current/state.json": "0o600",
+    "/opt/infrapulse-agent/current/conf.d/output.conf": "0o640",
+    "/var/lib/infrapulse-agent/telegraf.log": "0o600"
+  }
+}

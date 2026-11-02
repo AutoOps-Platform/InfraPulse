@@ -9,5 +9,6 @@ providers:
     allowUiUpdates: false
     updateIntervalSeconds: 30
     options:
-      path: /etc/grafana/dashboards
+      # Only the two InfraPulse adaptations; downloaded originals remain archival.
+      path: /etc/grafana/dashboards/infrapulse
       foldersFromFilesStructure: false

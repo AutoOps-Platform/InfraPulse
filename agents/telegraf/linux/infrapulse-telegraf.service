@@ -1,0 +1,35 @@
+# InfraPulse managed unit v1; do not point this unit at an external Telegraf.
+[Unit]
+Description=InfraPulse upstream Telegraf agent
+Wants=network-online.target
+After=network-online.target
+ConditionPathIsExecutable=/opt/infrapulse-agent/current/bin/telegraf
+
+[Service]
+Type=simple
+User=infrapulse-telegraf
+Group=infrapulse-telegraf
+ExecStart=/opt/infrapulse-agent/current/bin/telegraf --config /opt/infrapulse-agent/current/telegraf.conf --config-directory /opt/infrapulse-agent/current/conf.d
+Restart=on-failure
+RestartSec=10s
+TimeoutStopSec=30s
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/infrapulse-agent
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+# Telegraf writes only its private, size-bounded rotating log directory.
+# Never route raw plugin diagnostics to the shared journal.
+StandardOutput=null
+StandardError=null
+
+[Install]
+WantedBy=multi-user.target

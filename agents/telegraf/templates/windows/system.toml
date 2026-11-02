@@ -1,0 +1,12 @@
+# English counter names with explicit localization support and stable field names.
+[[inputs.win_perf_counters]]
+  PrintValid = false
+  UseWildcardsExpansion = true
+  LocalizeWildcardsExpansion = false
+  CountersRefreshInterval = "1m"
+  [[inputs.win_perf_counters.object]]
+    ObjectName = "System"
+    Instances = ["------"]
+    Counters = ["System Up Time", "Processes", "Threads", "Processor Queue Length"]
+    Measurement = "win_system"
+    WarnOnMissing = true

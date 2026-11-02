@@ -1,0 +1,1195 @@
+{
+  "id": null,
+  "uid": "infrapulse-linux-host",
+  "title": "InfraPulse / Linux Host",
+  "description": "InfraPulse adaptation of Grafana.com 14396 revision 1 (System Metrics for the Linux Hosts). Telegraf+Prometheus Remote Write; basic host resources only. No Node Exporter or InfluxDB. Source retained unmodified outside provisioned subdirectory.",
+  "gnetId": 14396,
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "graphTooltip": 1,
+  "tags": [
+    "InfraPulse",
+    "linux",
+    "telegraf"
+  ],
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "links": [
+    {
+      "title": "Public source 14396 / revision 1",
+      "type": "link",
+      "url": "https://grafana.com/grafana/dashboards/14396-system-metrics-for-the-linux-hosts/",
+      "targetBlank": true
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "server_id",
+        "label": "Server ID",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "infrapulse-prometheus"
+        },
+        "definition": "label_values(system_uptime{os=\"linux\",server_id!=\"\",agent_id!=\"\"}, server_id)",
+        "query": {
+          "query": "label_values(system_uptime{os=\"linux\",server_id!=\"\",agent_id!=\"\"}, server_id)",
+          "refId": "VariableQuery"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "hide": 0,
+        "multi": false,
+        "includeAll": false,
+        "options": [],
+        "current": {}
+      },
+      {
+        "name": "agent_id",
+        "label": "Agent ID",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "infrapulse-prometheus"
+        },
+        "definition": "label_values(system_uptime{os=\"linux\",server_id=~\"${server_id:regex}\",server_id!=\"\",agent_id!=\"\"}, agent_id)",
+        "query": {
+          "query": "label_values(system_uptime{os=\"linux\",server_id=~\"${server_id:regex}\",server_id!=\"\",agent_id!=\"\"}, agent_id)",
+          "refId": "VariableQuery"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "hide": 0,
+        "multi": false,
+        "includeAll": false,
+        "options": [],
+        "current": {}
+      },
+      {
+        "name": "mount_path",
+        "label": "Mount point",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "infrapulse-prometheus"
+        },
+        "definition": "label_values(disk_used_percent{os=\"linux\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\",path!=\"\",mode!=\"ro\",fstype!~\"tmpfs|devtmpfs|devfs|overlay|aufs|squashfs|iso9660|proc|sysfs|cgroup|cgroup2|debugfs|tracefs|securityfs|pstore|mqueue|devpts|hugetlbfs|fusectl|configfs|nsfs|autofs|binfmt_misc|ramfs|efivarfs\"}, path)",
+        "query": {
+          "query": "label_values(disk_used_percent{os=\"linux\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\",path!=\"\",mode!=\"ro\",fstype!~\"tmpfs|devtmpfs|devfs|overlay|aufs|squashfs|iso9660|proc|sysfs|cgroup|cgroup2|debugfs|tracefs|securityfs|pstore|mqueue|devpts|hugetlbfs|fusectl|configfs|nsfs|autofs|binfmt_misc|ramfs|efivarfs\"}, path)",
+          "refId": "VariableQuery"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "hide": 0,
+        "multi": true,
+        "includeAll": true,
+        "options": [],
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "allValue": ".*"
+      },
+      {
+        "name": "interface",
+        "label": "Interface",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "infrapulse-prometheus"
+        },
+        "definition": "label_values(net_bytes_recv{os=\"linux\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\",interface!=\"\"}, interface)",
+        "query": {
+          "query": "label_values(net_bytes_recv{os=\"linux\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\",interface!=\"\"}, interface)",
+          "refId": "VariableQuery"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "hide": 0,
+        "multi": true,
+        "includeAll": true,
+        "options": [],
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "allValue": ".*"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 26,
+      "title": "CPU usage",
+      "description": "Total CPU percentage, not a rate. Source: inputs.cpu report_active=true.",
+      "type": "stat",
+      "pluginVersion": "13.3.0",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infrapulse-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infrapulse-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max by (server_id,agent_id,os) (cpu_usage_active{os=\"linux\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\",cpu=\"cpu-total\"})",
+          "format": "time_series",
+          "instant": true,
+          "range": false,
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "noValue": "No data",
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "No data",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 85
+              },
+              {
+                "color": "red",
+                "value": 95
+              }
+            ]
+          },
+          "min": 0,
+          "max": 100,
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 25,
+      "title": "RAM usage",
+      "description": "Telegraf mem_used_percent (0–100); no synthetic zero when unavailable.",
+      "type": "stat",
+      "pluginVersion": "13.3.0",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infrapulse-prometheus"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infrapulse-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max by (server_id,agent_id,os) (mem_used_percent{os=\"linux\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\"})",
+          "format": "time_series",
+          "instant": true,
+          "range": false,
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "noValue": "No data",
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "No data",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 90
+              },
+              {
+                "color": "red",
+                "value": 95
+              }
+            ]
+          },
+          "min": 0,
+          "max": 100,
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 99,
+      "title": "Highest disk usage",
+      "description": "Maximum used percentage across selected writable persistent mount points. Same exclusions as Disk Space Low alert.",
+      "type": "stat",
+      "pluginVersion": "13.3.0",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infrapulse-prometheus"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infrapulse-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max(disk_used_percent{os=\"linux\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\",path!=\"\",path=~\"${mount_path:regex}\",mode!=\"ro\",fstype!~\"tmpfs|devtmpfs|devfs|overlay|aufs|squashfs|iso9660|proc|sysfs|cgroup|cgroup2|debugfs|tracefs|securityfs|pstore|mqueue|devpts|hugetlbfs|fusectl|configfs|nsfs|autofs|binfmt_misc|ramfs|efivarfs\"})",
+          "format": "time_series",
+          "instant": true,
+          "range": false,
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "noValue": "No data",
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "No data",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 80
+              },
+              {
+                "color": "red",
+                "value": 90
+              }
+            ]
+          },
+          "min": 0,
+          "max": 100,
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 10,
+      "title": "Uptime",
+      "description": "Instant latest uptime sample. This is not a scrape up or Management lifecycle status.",
+      "type": "stat",
+      "pluginVersion": "13.3.0",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infrapulse-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infrapulse-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max(system_uptime{os=\"linux\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\"})",
+          "format": "time_series",
+          "instant": true,
+          "range": false,
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 1,
+          "noValue": "No data",
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "No data",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 73,
+      "title": "Latest metrics age",
+      "description": "Age of newest original uptime timestamp found in a 24h subquery window with 1m steps plus Prometheus selector lookback (normally 5m). Original samples can remain visible for roughly 24h+5m. Sample time, not Gateway receipt time or authoritative Online/Offline status. No retained sample = No data.",
+      "type": "stat",
+      "pluginVersion": "13.3.0",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infrapulse-prometheus"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infrapulse-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "clamp_min(time() - max(max_over_time(timestamp(system_uptime{os=\"linux\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\"})[24h:1m])), 0)",
+          "format": "time_series",
+          "instant": true,
+          "range": false,
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 1,
+          "noValue": "No data",
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "No data",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 90
+              },
+              {
+                "color": "red",
+                "value": 300
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 14,
+      "title": "CPU usage",
+      "description": "A single selected server and agent; no cross-host sum.",
+      "type": "timeseries",
+      "pluginVersion": "13.3.0",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infrapulse-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infrapulse-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max by (server_id,agent_id,os) (cpu_usage_active{os=\"linux\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\",cpu=\"cpu-total\"})",
+          "format": "time_series",
+          "instant": false,
+          "range": true,
+          "legendFormat": "Total",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "noValue": "No data",
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "No data",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0,
+          "max": 100,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "spanNulls": false,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 108,
+      "title": "RAM capacity",
+      "description": "Telegraf inputs.mem capacity gauges in bytes. Available includes reclaimable memory; free alone is not available.",
+      "type": "timeseries",
+      "pluginVersion": "13.3.0",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infrapulse-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infrapulse-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max by (server_id,agent_id,os) (mem_used{os=\"linux\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\"})",
+          "format": "time_series",
+          "instant": false,
+          "range": true,
+          "legendFormat": "Used",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infrapulse-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max by (server_id,agent_id,os) (mem_available{os=\"linux\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\"})",
+          "format": "time_series",
+          "instant": false,
+          "range": true,
+          "legendFormat": "Available",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infrapulse-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max by (server_id,agent_id,os) (mem_total{os=\"linux\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\"})",
+          "format": "time_series",
+          "instant": false,
+          "range": true,
+          "legendFormat": "Total",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "decimals": 1,
+          "noValue": "No data",
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "No data",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "spanNulls": false,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 12,
+      "title": "Load average",
+      "description": "Raw runnable/uninterruptible load, not CPU percent; interpret against host CPU count.",
+      "type": "timeseries",
+      "pluginVersion": "13.3.0",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infrapulse-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infrapulse-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max by (server_id,agent_id,os) (system_load1{os=\"linux\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\"})",
+          "format": "time_series",
+          "instant": false,
+          "range": true,
+          "legendFormat": "1 minute",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infrapulse-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max by (server_id,agent_id,os) (system_load5{os=\"linux\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\"})",
+          "format": "time_series",
+          "instant": false,
+          "range": true,
+          "legendFormat": "5 minutes",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infrapulse-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max by (server_id,agent_id,os) (system_load15{os=\"linux\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\"})",
+          "format": "time_series",
+          "instant": false,
+          "range": true,
+          "legendFormat": "15 minutes",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 1,
+          "noValue": "No data",
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "No data",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "spanNulls": false,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 111,
+      "title": "Network traffic by interface",
+      "description": "Bytes/sec from cumulative byte counters. No cross-interface sum (bridges/virtual/physical may observe the same traffic). $__rate_interval assumes the configured base 15s collection and 30s datasource minimum; raise query Min step/datasource interval for slower profiles.",
+      "type": "timeseries",
+      "pluginVersion": "13.3.0",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infrapulse-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 12,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infrapulse-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "rate(net_bytes_recv{os=\"linux\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\",interface!=\"\",interface=~\"${interface:regex}\"}[$__rate_interval])",
+          "format": "time_series",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{interface}} RX",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infrapulse-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "rate(net_bytes_sent{os=\"linux\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\",interface!=\"\",interface=~\"${interface:regex}\"}[$__rate_interval])",
+          "format": "time_series",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{interface}} TX",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "decimals": 1,
+          "noValue": "No data",
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "No data",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "spanNulls": false,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 106,
+      "title": "Disk usage by mount point",
+      "description": "Selected writable persistent mount points only; pseudo/read-only filesystems excluded in dashboard and alert, not changed in collection profile.",
+      "type": "timeseries",
+      "pluginVersion": "13.3.0",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infrapulse-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infrapulse-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max by (server_id,agent_id,os,path) (disk_used_percent{os=\"linux\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\",path!=\"\",path=~\"${mount_path:regex}\",mode!=\"ro\",fstype!~\"tmpfs|devtmpfs|devfs|overlay|aufs|squashfs|iso9660|proc|sysfs|cgroup|cgroup2|debugfs|tracefs|securityfs|pstore|mqueue|devpts|hugetlbfs|fusectl|configfs|nsfs|autofs|binfmt_misc|ramfs|efivarfs\"})",
+          "format": "time_series",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{path}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "noValue": "No data",
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "No data",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0,
+          "max": 100,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "spanNulls": false,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 110,
+      "title": "Disk free space by mount point",
+      "description": "Telegraf disk_free bytes. Retains mount identity; never adds capacities from different mounts.",
+      "type": "timeseries",
+      "pluginVersion": "13.3.0",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infrapulse-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 20,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infrapulse-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "min by (server_id,agent_id,os,path) (disk_free{os=\"linux\",server_id=~\"${server_id:regex}\",agent_id=~\"${agent_id:regex}\",server_id!=\"\",agent_id!=\"\",path!=\"\",path=~\"${mount_path:regex}\",mode!=\"ro\",fstype!~\"tmpfs|devtmpfs|devfs|overlay|aufs|squashfs|iso9660|proc|sysfs|cgroup|cgroup2|debugfs|tracefs|securityfs|pstore|mqueue|devpts|hugetlbfs|fusectl|configfs|nsfs|autofs|binfmt_misc|ramfs|efivarfs\"})",
+          "format": "time_series",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{path}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "decimals": 1,
+          "noValue": "No data",
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "No data",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "spanNulls": false,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 900,
+      "title": "Reading this dashboard",
+      "type": "text",
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 24,
+        "h": 4
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Adapted from public [14396 revision 1](https://grafana.com/grafana/dashboards/14396-system-metrics-for-the-linux-hosts/) for InfraPulse Telegraf push metrics. Select **one server_id and one agent_id**, then mounts/interfaces. No data is unknown, not healthy zero. Metrics age uses sample timestamps, not Management Online status; agents never scrape into `up`. OS/host tags are descriptive, not authenticated inventory. CPU/RAM/disk/metrics-stale alerts are evaluated globally, **independent of dashboard filters**. A slower custom profile needs a correspondingly larger network query Min step/rate window. See deployment documentation for thresholds, No Data and 24h stale-discovery limits."
+      }
+    }
+  ]
+}

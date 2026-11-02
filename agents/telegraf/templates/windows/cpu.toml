@@ -1,0 +1,11 @@
+[[inputs.win_perf_counters]]
+  PrintValid = false
+  UseWildcardsExpansion = true
+  LocalizeWildcardsExpansion = false
+  [[inputs.win_perf_counters.object]]
+    ObjectName = "Processor"
+    Instances = ["_Total"]
+    Counters = ["% Processor Time", "% User Time", "% Privileged Time", "% Idle Time"]
+    Measurement = "win_cpu"
+    IncludeTotal = true
+    WarnOnMissing = true

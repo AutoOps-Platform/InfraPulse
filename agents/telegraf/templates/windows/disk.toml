@@ -1,0 +1,11 @@
+[[inputs.win_perf_counters]]
+  PrintValid = false
+  UseWildcardsExpansion = true
+  LocalizeWildcardsExpansion = false
+  [[inputs.win_perf_counters.object]]
+    ObjectName = "LogicalDisk"
+    Instances = @VOLUMES@
+    Counters = ["% Free Space", "Free Megabytes", "Disk Read Bytes/sec", "Disk Write Bytes/sec", "Current Disk Queue Length"]
+    Measurement = "win_disk"
+    IncludeTotal = false
+    WarnOnMissing = true

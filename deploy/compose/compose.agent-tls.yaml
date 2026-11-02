@@ -1,0 +1,71 @@
+# Optional direct TLS for Step 4. Requires Docker Compose >= 2.24.4 (!override).
+# Existing compose.yaml keeps HTTP-only lab defaults; no Nginx is introduced.
+services:
+  management:
+    environment:
+      MANAGEMENT_AGENT_TLS_CERT_FILE: /run/secrets/agent-control-cert
+      MANAGEMENT_AGENT_TLS_KEY_FILE: /run/secrets/agent-control-key
+      MANAGEMENT_AGENT_TLS_PORT: "3443"
+      MANAGEMENT_AGENT_TLS_BIND: "0.0.0.0"
+      MANAGEMENT_AGENT_INGEST_BASE_URL: ${AGENT_GATEWAY_ORIGIN:?explicit HTTPS Agent-visible Gateway origin required}
+    ports: !override
+      - "127.0.0.1:${MANAGEMENT_HOST_PORT:-3001}:3000"
+      - "${AGENT_CONTROL_BIND:-127.0.0.1}:${AGENT_CONTROL_PORT:-3443}:3443"
+    volumes:
+      - type: bind
+        source: ${AGENT_CONTROL_TLS_CERT_FILE:?PEM certificate chain path required}
+        target: /run/secrets/agent-control-cert
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${AGENT_CONTROL_TLS_KEY_FILE:?PEM private key path required}
+        target: /run/secrets/agent-control-key
+        read_only: true
+        bind: {create_host_path: false}
+
+  ingest:
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+      - --workers
+      - "1"
+      - --no-access-log
+      - --loop
+      - asyncio
+      - --ssl-certfile
+      - /run/secrets/gateway-tls-cert
+      - --ssl-keyfile
+      - /run/secrets/gateway-tls-key
+    ports: !override
+      - "${AGENT_GATEWAY_BIND:-127.0.0.1}:${AGENT_GATEWAY_PORT:-8443}:8000"
+    environment:
+      INGEST_TLS_SERVER_NAME: ${INGEST_TLS_SERVER_NAME:?Gateway certificate DNS SAN required}
+    networks:
+      monitoring:
+        aliases: ["${INGEST_TLS_SERVER_NAME:?Gateway certificate DNS SAN required}"]
+    volumes:
+      - type: bind
+        source: ${AGENT_GATEWAY_TLS_CERT_FILE:?PEM certificate chain path required}
+        target: /run/secrets/gateway-tls-cert
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${AGENT_GATEWAY_TLS_KEY_FILE:?PEM private key path required}
+        target: /run/secrets/gateway-tls-key
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${AGENT_GATEWAY_TLS_CA_FILE:?Gateway health-check CA PEM path required}
+        target: /run/secrets/gateway-health-ca
+        read_only: true
+        bind: {create_host_path: false}
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import os,ssl,urllib.request; c=ssl.create_default_context(cafile='/run/secrets/gateway-health-ca'); o=urllib.request.build_opener(urllib.request.ProxyHandler({}),urllib.request.HTTPSHandler(context=c)); o.open('https://'+os.environ['INGEST_TLS_SERVER_NAME']+':8000/health/ready',timeout=2).close()"

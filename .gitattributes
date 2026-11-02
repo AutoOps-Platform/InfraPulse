@@ -1,0 +1,9 @@
+# Step 4 bundle must retain executable-source line endings across Windows/Linux.
+agents/telegraf/**/*.sh text eol=lf
+agents/telegraf/**/*.py text eol=lf
+agents/telegraf/**/*.service text eol=lf
+agents/telegraf/**/*.toml text eol=lf
+agents/telegraf/**/*.tpl text eol=lf
+agents/telegraf/**/*.json text eol=lf
+agents/telegraf/**/*.ps1 text eol=crlf
+agents/telegraf/**/*.psm1 text eol=crlf

@@ -1,0 +1,246 @@
+# Grafana-managed multidimensional alerts, org 1 / existing Prometheus datasource.
+# Notification destinations/policies remain operator-owned (none overwritten here).
+# Thresholds are starting defaults, NOT benchmarked production recommendations.
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: infrapulse-host-health
+    folder: InfraPulse
+    interval: 1m
+    rules:
+      - uid: infrapulse-cpu-high
+        title: InfraPulse CPU High
+        condition: C
+        for: 5m
+        noDataState: NoData
+        execErrState: Error
+        missing_series_evals_to_resolve: 2
+        isPaused: false
+        labels:
+          severity: warning
+          infrapulse_scope: host
+          signal: cpu
+        annotations:
+          summary: 'CPU above 85%: {{ $labels.server_id }} / {{ $labels.agent_id }}'
+          description: 'CPU {{ $values.B.Value }}% for 5m. Check sustained workload and CPU capacity; do not restart services automatically. OS is a descriptive Agent tag.'
+          dashboard_url: '{{ if eq $labels.os "windows" }}/d/infrapulse-windows-host{{ else }}/d/infrapulse-linux-host{{ end }}?var-server_id={{ $labels.server_id }}&var-agent_id={{ $labels.agent_id }}'
+        data:
+          - refId: A
+            datasourceUid: infrapulse-prometheus
+            relativeTimeRange: {from: 600, to: 0}
+            model:
+              datasource: {type: prometheus, uid: infrapulse-prometheus}
+              editorMode: code
+              expr: >-
+                max by (server_id,agent_id,os) (cpu_usage_active{os="linux",cpu="cpu-total",server_id!="",agent_id!=""})
+                or
+                max by (server_id,agent_id,os) (win_cpu_Percent_Processor_Time{os="windows",instance="_Total",server_id!="",agent_id!=""})
+              instant: true
+              range: false
+              refId: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model:
+              datasource: {type: __expr__, uid: __expr__}
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+          - refId: C
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model:
+              datasource: {type: __expr__, uid: __expr__}
+              type: threshold
+              expression: B
+              refId: C
+              conditions:
+                - evaluator: {type: gt, params: [85]}
+                  operator: {type: and}
+                  query: {params: [C]}
+                  reducer: {type: last, params: []}
+                  type: query
+
+      - uid: infrapulse-memory-high
+        title: InfraPulse Memory High
+        condition: C
+        for: 5m
+        noDataState: NoData
+        execErrState: Error
+        missing_series_evals_to_resolve: 2
+        isPaused: false
+        labels:
+          severity: warning
+          infrapulse_scope: host
+          signal: memory
+        annotations:
+          summary: 'RAM above 90%: {{ $labels.server_id }} / {{ $labels.agent_id }}'
+          description: 'Telegraf mem_used_percent is {{ $values.B.Value }}% for 5m. Check available memory, workload and reclaimable cache; no remediation is executed.'
+          dashboard_url: '{{ if eq $labels.os "windows" }}/d/infrapulse-windows-host{{ else }}/d/infrapulse-linux-host{{ end }}?var-server_id={{ $labels.server_id }}&var-agent_id={{ $labels.agent_id }}'
+        data:
+          - refId: A
+            datasourceUid: infrapulse-prometheus
+            relativeTimeRange: {from: 600, to: 0}
+            model:
+              datasource: {type: prometheus, uid: infrapulse-prometheus}
+              editorMode: code
+              expr: max by (server_id,agent_id,os) (mem_used_percent{os=~"linux|windows",server_id!="",agent_id!=""})
+              instant: true
+              range: false
+              refId: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model:
+              datasource: {type: __expr__, uid: __expr__}
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+          - refId: C
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model:
+              datasource: {type: __expr__, uid: __expr__}
+              type: threshold
+              expression: B
+              refId: C
+              conditions:
+                - evaluator: {type: gt, params: [90]}
+                  operator: {type: and}
+                  query: {params: [C]}
+                  reducer: {type: last, params: []}
+                  type: query
+
+      - uid: infrapulse-disk-space-low
+        title: InfraPulse Disk Space Low
+        condition: C
+        for: 5m
+        noDataState: NoData
+        execErrState: Error
+        missing_series_evals_to_resolve: 2
+        isPaused: false
+        labels:
+          severity: warning
+          infrapulse_scope: host
+          signal: disk
+        annotations:
+          summary: 'Disk free below 10%: {{ $labels.server_id }} / {{ $labels.agent_id }} / {{ $labels.volume }}'
+          description: 'Volume {{ $labels.volume }} has {{ $values.B.Value }}% free for 5m. Check growth and retention; do not delete files automatically. Linux read-only/pseudo filesystems and Windows _Total are excluded.'
+          dashboard_url: '{{ if eq $labels.os "windows" }}/d/infrapulse-windows-host{{ else }}/d/infrapulse-linux-host{{ end }}?var-server_id={{ $labels.server_id }}&var-agent_id={{ $labels.agent_id }}'
+        data:
+          - refId: A
+            datasourceUid: infrapulse-prometheus
+            relativeTimeRange: {from: 600, to: 0}
+            model:
+              datasource: {type: prometheus, uid: infrapulse-prometheus}
+              editorMode: code
+              # Models/annotations are excluded from Grafana env interpolation.
+              # Keep literal $1 (NOT $$1); do not put these rules inline in Compose.
+              expr: >-
+                (100 - max by (server_id,agent_id,os,volume)
+                  (label_replace(disk_used_percent{os="linux",server_id!="",agent_id!="",path!="",mode!="ro",fstype!~"tmpfs|devtmpfs|devfs|overlay|aufs|squashfs|iso9660|proc|sysfs|cgroup|cgroup2|debugfs|tracefs|securityfs|pstore|mqueue|devpts|hugetlbfs|fusectl|configfs|nsfs|autofs|binfmt_misc|ramfs|efivarfs"},"volume","$1","path","(.+)")))
+                or
+                (min by (server_id,agent_id,os,volume)
+                  (label_replace(win_disk_Percent_Free_Space{os="windows",server_id!="",agent_id!="",instance!="",instance!="_Total"},"volume","$1","instance","(.+)")))
+              instant: true
+              range: false
+              refId: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model:
+              datasource: {type: __expr__, uid: __expr__}
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+          - refId: C
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model:
+              datasource: {type: __expr__, uid: __expr__}
+              type: threshold
+              expression: B
+              refId: C
+              conditions:
+                - evaluator: {type: lt, params: [10]}
+                  operator: {type: and}
+                  query: {params: [C]}
+                  reducer: {type: last, params: []}
+                  type: query
+
+      - uid: infrapulse-metrics-stale
+        title: InfraPulse Metrics Stale
+        condition: C
+        for: 1m
+        noDataState: NoData
+        execErrState: Error
+        missing_series_evals_to_resolve: 2
+        isPaused: false
+        labels:
+          severity: warning
+          infrapulse_scope: host
+          signal: metrics_stale
+        annotations:
+          summary: 'No recent uptime samples: {{ $labels.server_id }} / {{ $labels.agent_id }}'
+          description: 'Observed within 24h but no uptime sample in 5m, pending 1m. This does NOT prove the server is powered off. Check Agent, credentials/TLS, Gateway and storage. After 24h identity history expires: MissingSeries/NoData is NOT recovery. Never-seen servers require Management inventory checks.'
+          dashboard_url: '{{ if eq $labels.os "windows" }}/d/infrapulse-windows-host{{ else }}/d/infrapulse-linux-host{{ end }}?var-server_id={{ $labels.server_id }}&var-agent_id={{ $labels.agent_id }}'
+        data:
+          - refId: A
+            datasourceUid: infrapulse-prometheus
+            relativeTimeRange: {from: 600, to: 0}
+            model:
+              datasource: {type: prometheus, uid: infrapulse-prometheus}
+              editorMode: code
+              # K=identities seen in24h; F=identities with uptime in5m.
+              # (K unless F) gives1 for stale IDs; 0*K fills fresh IDs with0.
+              # Empty K stays EMPTY (NoData), never vector(0) fake healthy.
+              expr: >-
+                (max by (server_id,agent_id,os)
+                  (present_over_time({__name__="system_uptime",os="linux",server_id!="",agent_id!=""}[24h])
+                   or present_over_time({__name__="win_system_System_Up_Time",os="windows",server_id!="",agent_id!=""}[24h]))
+                 unless on (server_id,agent_id,os)
+                 max by (server_id,agent_id,os)
+                  (present_over_time({__name__="system_uptime",os="linux",server_id!="",agent_id!=""}[5m])
+                   or present_over_time({__name__="win_system_System_Up_Time",os="windows",server_id!="",agent_id!=""}[5m])))
+                or on (server_id,agent_id,os)
+                (0 * max by (server_id,agent_id,os)
+                  (present_over_time({__name__="system_uptime",os="linux",server_id!="",agent_id!=""}[24h])
+                   or present_over_time({__name__="win_system_System_Up_Time",os="windows",server_id!="",agent_id!=""}[24h])))
+              instant: true
+              range: false
+              refId: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model:
+              datasource: {type: __expr__, uid: __expr__}
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+          - refId: C
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model:
+              datasource: {type: __expr__, uid: __expr__}
+              type: threshold
+              expression: B
+              refId: C
+              conditions:
+                - evaluator: {type: gt, params: [0.5]}
+                  operator: {type: and}
+                  query: {params: [C]}
+                  reducer: {type: last, params: []}
+                  type: query

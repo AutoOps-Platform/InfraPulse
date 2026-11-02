@@ -1,0 +1,3 @@
+# Native Windows interface names; matches options.network.interfaces on both OSes.
+[[inputs.net]]
+@NETWORK_OPTIONS@

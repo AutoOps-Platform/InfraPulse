@@ -1,0 +1,108 @@
+{
+  "scope": "Authorized live Grafana dashboard verification only; no alert firing or notification test",
+  "observed_date": "2026-11-02",
+  "environment": {
+    "ssh_alias": "vm-1",
+    "compose_project": "infrapulse-vm1-step4",
+    "grafana_version": "13.3.0",
+    "grafana_commit": "6f8ce3c693b493043ebcd4787566d2b6b118b0f0",
+    "grafana_health": "healthy",
+    "grafana_database_health": "ok",
+    "host_binding": "127.0.0.1:3000",
+    "browser_ssh_tunnel": "http://127.0.0.1:57932",
+    "public_application_ports_added": false,
+    "other_four_containers_preserved_healthy": true,
+    "agent_state": "active/running",
+    "agent_restarts": 0
+  },
+  "source_archive_sha256": "4ddd095296a52f7e001dd86284038fc16a23bf1bfa23a91bf1d15272d969e826",
+  "authentication": {
+    "method": "Actual Grafana POST /login with existing private lab credentials; native HttpOnly session cookies received by browser via one-use loopback SSH bridge",
+    "login_http_status": 200,
+    "secret_or_session_value_logged": false,
+    "one_use_bridge_state_after_login": "inactive",
+    "one_use_bridge_tunnel_closed": true
+  },
+  "datasource": {
+    "uid": "infrapulse-prometheus",
+    "health_http_status": 200,
+    "health_status": "OK",
+    "health_message": "Successfully queried the Prometheus API."
+  },
+  "dashboards": [
+    {
+      "uid": "infrapulse-linux-host",
+      "title": "InfraPulse / Linux Host",
+      "folder": "InfraPulse",
+      "api_http_status": 200,
+      "provisioned": true,
+      "panel_count": 12,
+      "schema_version_returned": 39,
+      "browser_render_observed": true,
+      "actual_linux_metrics_observed": true
+    },
+    {
+      "uid": "infrapulse-windows-host",
+      "title": "InfraPulse / Windows Host",
+      "folder": "InfraPulse",
+      "api_http_status": 200,
+      "provisioned": true,
+      "panel_count": 11,
+      "schema_version_returned": 39,
+      "browser_render_observed": true,
+      "browser_state": "No data; no Windows Agent exists in this lab",
+      "actual_windows_metrics_verified": false
+    }
+  ],
+  "linux_observation": {
+    "server_id": "76c61c9a-e845-474e-932b-c90b6ee86920",
+    "agent_id": "4e7ea3d4-da72-49ee-a35a-539d3e6865e2",
+    "identity_variables_autoselected_correctly": true,
+    "mount_and_interface_variables_populated": true,
+    "overview_screenshot_values": {
+      "cpu_usage_percent": 3.7,
+      "ram_usage_percent": 33.1,
+      "highest_disk_usage_percent": 35.7,
+      "uptime_display": "6.1 hours",
+      "sample_age_display": "1.2 mins"
+    },
+    "graphs_observed": ["CPU", "RAM used/available/total", "Load 1/5/15", "Network RX/TX per interface", "Disk used percent per mount", "Disk free bytes per mount"],
+    "disk_mounts_observed": ["/", "/boot", "/boot/efi"],
+    "sample_timestamp_before": 1793633055.261,
+    "sample_timestamp_after": 1793633265.857,
+    "before_query_utc": "2026-11-02T15:24:40.775Z",
+    "after_query_utc": "2026-11-02T15:28:00.940Z",
+    "sample_timestamp_advanced": true
+  },
+  "controlled_grafana_query_batch": {
+    "http_status": 200,
+    "target_count": 16,
+    "all_target_statuses": 200,
+    "all_targets_returned_nonempty_frames": true,
+    "errors": [],
+    "single_batch_elapsed_ms": 150,
+    "not_a_load_benchmark": true,
+    "frames_per_ref": {"P106_A": 3, "P108_A": 1, "P108_B": 1, "P108_C": 1, "P10_A": 1, "P110_A": 3, "P111_A": 10, "P111_B": 10, "P12_A": 1, "P12_B": 1, "P12_C": 1, "P14_A": 1, "P25_A": 1, "P26_A": 1, "P73_A": 1, "P99_A": 1},
+    "network_notices": [
+      "PromQL info: metric might not be a counter, name does not end in _total/_sum/_count/_bucket: net_bytes_recv",
+      "PromQL info: metric might not be a counter, name does not end in _total/_sum/_count/_bucket: net_bytes_sent"
+    ]
+  },
+  "diagnostics_and_limits": {
+    "startup_health_first_request": "Connection reset while initial Grafana startup was incomplete; subsequently healthy, zero container restarts observed",
+    "optional_provisioning_directories": "Initial missing alerting/plugins directory log entries; empty lab directories added. No alert rule files copied.",
+    "transient_query_logs": "Observed context-canceled/502 log entries during UI refresh/navigation. Controlled stable 16-target batch returned all200 with data; no persistent panel query failure reproduced.",
+    "alert_rules_loaded_in_lab": false,
+    "alert_evaluation_transitions_tested": false,
+    "notifications_tested": false,
+    "windows_agent_tested": false,
+    "two_host_isolation_tested": false,
+    "dashboard_update_or_restart_persistence_tested": false,
+    "no_repository_dashboard_query_changes_required": true
+  },
+  "screenshots": [
+    {"file": "grafana-vm1-linux-overview-20261102.png", "sha256": "223e994d198323405e7566b3040aba6c3a871544af9d2b09c20888d091b1025a"},
+    {"file": "grafana-vm1-linux-disks-20261102.png", "sha256": "1efdcfcf8d5b44ea1e9df25b6315de01efe50fbaf7168cbd1f88f2b0096305d7"},
+    {"file": "grafana-vm1-windows-nodata-20261102.png", "sha256": "3ce3df247a65864edc01e528954769ea13a1db6857ad67c913f0d005fcd040fe"}
+  ]
+}

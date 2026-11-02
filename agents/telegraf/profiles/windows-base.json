@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "os": "windows",
+  "interval_seconds": 15,
+  "metric_groups": {"cpu": true, "memory": true, "disk": true, "network": true},
+  "options": {}
+}

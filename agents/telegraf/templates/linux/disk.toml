@@ -1,0 +1,4 @@
+[[inputs.disk]]
+@DISK_OPTIONS@
+[[inputs.diskio]]
+  skip_serial_number = true
