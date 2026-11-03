@@ -54,14 +54,18 @@ AGENT_GATEWAY_TLS_CERT_FILE=/secure/certs/metrics-fullchain.pem
 AGENT_GATEWAY_TLS_KEY_FILE=/secure/certs/metrics-key.pem
 AGENT_GATEWAY_TLS_CA_FILE=/secure/certs/root-ca.pem
 INGEST_TLS_SERVER_NAME=metrics.example.internal
+# Bước7: file mới đã render verified TLS scrape, không copy đè config đang dùng:
+PROMETHEUS_TLS_SCRAPE_CONFIG_FILE=/secure/config/prometheus-tls.yml
 ```
+
+TLS overlay cũng chuyển Prometheus self-monitoring sang HTTPS. Trước khi dùng overlay, chạy [renderer](<../../deploy/scripts/render-prometheus-tls.py>) với cùng DNS SAN, ví dụ `python3 deploy/scripts/render-prometheus-tls.py --server-name metrics.example.internal --output /secure/config/prometheus-tls.yml` ở thư mục operator kiểm soát, file đích chưa tồn tại. [Runbook Bước7](<central-vm2-step7.md#4-tls-gateway-và-prometheus-self-monitoring>) giải thích mount public CA và migration biến bắt buộc mới; không bỏ xác minh TLS để chữa scrape error.
 
 Các hostname/path trên chỉ là ví dụ phải thay; không có secret hoặc certificate tự sinh. `AGENT_GATEWAY_ORIGIN` override giá trị provisioning `MANAGEMENT_AGENT_INGEST_BASE_URL`; phải đúng origin mà các máy Agent nhìn thấy, không phải tên container. `INGEST_TLS_SERVER_NAME` là DNS SAN trong Gateway cert và là alias mạng Docker cho health-check có xác minh TLS; không chứa scheme/port/path. CA health-check dùng để xác minh cert Gateway, không phải private key. PEM cert/fullchain cần include intermediate; private key không mã hóa passphrase vì service không tương tác. Quyền đọc chỉ cấp đúng runtime UID 10002 Management / 10001 Gateway và operator, không chmod world-readable private key.
 
 Lệnh triển khai **chỉ chạy sau này** từ repository root, sau bootstrap/migrate/seed central theo Bước 3:
 
 ```powershell
-docker compose --env-file .env -f deploy/compose/compose.yaml -f deploy/compose/compose.agent-tls.yaml up -d --build management ingest
+docker compose --env-file .env -f deploy/compose/compose.yaml -f deploy/compose/compose.agent-tls.yaml up -d --build prometheus management ingest
 ```
 
 Không chạy lệnh này trong phiên implementation. TLS listener control mặc định 3443; native deployment ngoài Compose dùng `MANAGEMENT_AGENT_TLS_CERT_FILE`, `MANAGEMENT_AGENT_TLS_KEY_FILE`, `MANAGEMENT_AGENT_TLS_PORT`, `MANAGEMENT_AGENT_TLS_BIND` (mặc định bind `127.0.0.1`). Không có biến TLS nào thì không mở listener mới; cấu hình TLS thiếu/sai làm startup fail, không tự fallback HTTP cho Agent. Đổi cert phải restart runtime.

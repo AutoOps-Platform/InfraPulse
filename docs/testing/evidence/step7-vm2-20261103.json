@@ -1,0 +1,977 @@
+{
+  "recorded_at": "2026-11-03T05:26:41.402518+00:00",
+  "host": "vm-2",
+  "scope": "same-host Linux Monitoring and Management integration, not Windows/production qualification",
+  "evidence": {
+    "preparation": {
+      "prepared": true,
+      "source_archive_sha256": "6b6cf73d50098739bdbea063f1454bc0022836a02101ba080f44ce0143852e02",
+      "host": "vm-2",
+      "private_ip": "172.16.0.4",
+      "deployment_id": "10380f52-fcb8-459e-b05c-e220eefaaab0",
+      "gateway_id": "be5a4855-d68a-4552-8317-3786f771ee32",
+      "context": "vm2:10380f52-fcb8-459e-b05c-e220eefaaab0:org:1",
+      "grafana_root_url": "http://127.0.0.1:3000/",
+      "agent_control_origin": "https://172.16.0.4:3443",
+      "gateway_origin": "https://172.16.0.4:8443",
+      "source_commit": "e6bd0097967a389f130940672573af310e0af610"
+    },
+    "image-verification": [
+      {
+        "tag": "infrapulse-vm2-ops:20261103",
+        "loaded_id": "sha256:9a5139fc5089b5836f8adcbcde8ab047d8fde1541f464fccb50a17a8d9cfcd00",
+        "config_and_layer_chain_match": true
+      },
+      {
+        "tag": "infrapulse-vm2-management-runtime:20261103",
+        "loaded_id": "sha256:64ef53f441654eda1f3bc9cf9d644fb8783c467d31193f6f28b1736736449a56",
+        "config_and_layer_chain_match": true
+      },
+      {
+        "tag": "infrapulse-vm2-gateway-runtime:20261103",
+        "loaded_id": "sha256:531d00b268b7981e82db0057b777c1acd0fd602b303b683df2c6b1330908831e",
+        "config_and_layer_chain_match": true
+      }
+    ],
+    "grafana-enrollment": {
+      "at": "2026-11-03T05:08:13.850504+00:00",
+      "health": {
+        "database": "ok",
+        "version": "13.3.0",
+        "commit": "6f8ce3c693b493043ebcd4787566d2b6b118b0f0"
+      },
+      "actual_user_id": 1,
+      "actual_org_id": 1,
+      "organization_name": "Main Org.",
+      "configured_org_matches": true,
+      "operator_enrollment_context": "vm2:10380f52-fcb8-459e-b05c-e220eefaaab0:org:1",
+      "root_url": "http://127.0.0.1:3000/",
+      "identity_mode": "grafana13-id-token",
+      "experimental_lab_opt_in": true
+    },
+    "central-health-before-agent": {
+      "at": "2026-11-03T05:11:03.343836+00:00",
+      "checks": {
+        "management": 200,
+        "gateway": 200,
+        "prometheus": 200,
+        "gateway_https_scrape_up": [
+          "1"
+        ]
+      },
+      "source_boot_id": "aa53e2ac-dc8a-480b-949f-bb04b5e0852f"
+    },
+    "telegraf-provenance": {
+      "version": "1.38.2",
+      "official_release": "https://github.com/influxdata/telegraf/releases/tag/v1.38.2",
+      "release_page_hash_verified_at_preceding_probe": true,
+      "archive_sha256": "b2306602441bd93ea767fb78efc0d0d477c9898cf6396a4afcd085e8420d2030",
+      "binary_sha256": "08962dbb96e8528d0b634df8798a01a08a595f8d454d5b0f23a176b38ad76d55"
+    },
+    "agent-installation": {
+      "at": "2026-11-03T05:16:33.692005+00:00",
+      "install_exit": 0,
+      "release": "r-20261103051629-7f74f2b0880ff271",
+      "state": {
+        "server_id": "ce46815d-0180-4a16-a02b-ab019add686d",
+        "agent_id": "aecf877a-3884-43ec-bb52-bbfabcdd7cfc",
+        "os": "linux",
+        "profile_version_id": "2365a93d-df3b-4ae5-8328-eba61d80f64b",
+        "checksum": "a6c6bfba54493d5e32d7ed2d42c0a4ff0e8bbc1521110b6a160757ad935c7156",
+        "interval_seconds": 15,
+        "report_pending": false
+      },
+      "service": {
+        "MainPID": "10002",
+        "NRestarts": "0",
+        "ExecMainStatus": "0",
+        "User": "infrapulse-telegraf",
+        "Group": "infrapulse-telegraf",
+        "ActiveState": "active",
+        "SubState": "running",
+        "UnitFileState": "enabled"
+      }
+    },
+    "metrics-first": {
+      "at": "2026-11-03T05:17:24.070622+00:00",
+      "queries": {
+        "series": {
+          "expr": "count({server_id=\"ce46815d-0180-4a16-a02b-ab019add686d\",agent_id=\"aecf877a-3884-43ec-bb52-bbfabcdd7cfc\"})",
+          "results": [
+            {
+              "metric": {},
+              "value": [
+                1793683044.096,
+                "309"
+              ]
+            }
+          ]
+        },
+        "cpu": {
+          "expr": "cpu_usage_active{server_id=\"ce46815d-0180-4a16-a02b-ab019add686d\",agent_id=\"aecf877a-3884-43ec-bb52-bbfabcdd7cfc\",cpu=\"cpu-total\"}",
+          "results": [
+            {
+              "metric": {
+                "__name__": "cpu_usage_active",
+                "agent_id": "aecf877a-3884-43ec-bb52-bbfabcdd7cfc",
+                "cpu": "cpu-total",
+                "host": "vm-2",
+                "os": "linux",
+                "server_id": "ce46815d-0180-4a16-a02b-ab019add686d"
+              },
+              "value": [
+                1793683044.099,
+                "4.874878128044062"
+              ]
+            }
+          ]
+        },
+        "memory": {
+          "expr": "mem_used_percent{server_id=\"ce46815d-0180-4a16-a02b-ab019add686d\",agent_id=\"aecf877a-3884-43ec-bb52-bbfabcdd7cfc\"}",
+          "results": [
+            {
+              "metric": {
+                "__name__": "mem_used_percent",
+                "agent_id": "aecf877a-3884-43ec-bb52-bbfabcdd7cfc",
+                "host": "vm-2",
+                "os": "linux",
+                "server_id": "ce46815d-0180-4a16-a02b-ab019add686d"
+              },
+              "value": [
+                1793683044.101,
+                "30.600660614243623"
+              ]
+            }
+          ]
+        },
+        "disk": {
+          "expr": "disk_used_percent{server_id=\"ce46815d-0180-4a16-a02b-ab019add686d\",agent_id=\"aecf877a-3884-43ec-bb52-bbfabcdd7cfc\",path=\"/\"}",
+          "results": [
+            {
+              "metric": {
+                "__name__": "disk_used_percent",
+                "agent_id": "aecf877a-3884-43ec-bb52-bbfabcdd7cfc",
+                "device": "sda1",
+                "fstype": "ext4",
+                "host": "vm-2",
+                "label": "cloudimg-rootfs",
+                "mode": "rw",
+                "os": "linux",
+                "path": "/",
+                "server_id": "ce46815d-0180-4a16-a02b-ab019add686d"
+              },
+              "value": [
+                1793683044.102,
+                "36.897329893941176"
+              ]
+            }
+          ]
+        },
+        "network": {
+          "expr": "net_bytes_recv{server_id=\"ce46815d-0180-4a16-a02b-ab019add686d\",agent_id=\"aecf877a-3884-43ec-bb52-bbfabcdd7cfc\",interface=\"eth0\"}",
+          "results": [
+            {
+              "metric": {
+                "__name__": "net_bytes_recv",
+                "agent_id": "aecf877a-3884-43ec-bb52-bbfabcdd7cfc",
+                "host": "vm-2",
+                "interface": "eth0",
+                "os": "linux",
+                "server_id": "ce46815d-0180-4a16-a02b-ab019add686d"
+              },
+              "value": [
+                1793683044.104,
+                "1895997291"
+              ]
+            }
+          ]
+        },
+        "uptime": {
+          "expr": "system_uptime{server_id=\"ce46815d-0180-4a16-a02b-ab019add686d\",agent_id=\"aecf877a-3884-43ec-bb52-bbfabcdd7cfc\"}",
+          "results": [
+            {
+              "metric": {
+                "__name__": "system_uptime",
+                "agent_id": "aecf877a-3884-43ec-bb52-bbfabcdd7cfc",
+                "host": "vm-2",
+                "os": "linux",
+                "server_id": "ce46815d-0180-4a16-a02b-ab019add686d"
+              },
+              "value": [
+                1793683044.105,
+                "2644"
+              ]
+            }
+          ]
+        },
+        "latest_sample": {
+          "expr": "max(timestamp(system_uptime{server_id=\"ce46815d-0180-4a16-a02b-ab019add686d\",agent_id=\"aecf877a-3884-43ec-bb52-bbfabcdd7cfc\"}))",
+          "results": [
+            {
+              "metric": {},
+              "value": [
+                1793683044.106,
+                "1793683035.768"
+              ]
+            }
+          ]
+        },
+        "gateway_https_self_monitoring": {
+          "expr": "up{job=\"ingestion-gateway\"}",
+          "results": [
+            {
+              "metric": {
+                "__name__": "up",
+                "instance": "ingest:8000",
+                "job": "ingestion-gateway"
+              },
+              "value": [
+                1793683044.107,
+                "1"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "metrics-advancing": {
+      "at": "2026-11-03T05:20:14.442228+00:00",
+      "before_sample_timestamp": "1793683035.768",
+      "after_sample_timestamp": "1793683200.926",
+      "timestamps_advance": true,
+      "after_necessary_grafana_recreate": true,
+      "agent_restarted_for_test": false
+    },
+    "auth-and-database": {
+      "at": "2026-11-03T05:18:08.345556+00:00",
+      "https_auth_checks": {
+        "missing_key": 401,
+        "invalid_key": 401,
+        "wrong_server_header": 403,
+        "untrusted_ca_rejected": true
+      },
+      "database": {
+        "servers": 1,
+        "agents": 1,
+        "credentials": 1,
+        "credential_hashes_32_bytes": true,
+        "exact_server_agent_link": true,
+        "profile_pins": 1,
+        "audit_rows": 5
+      }
+    },
+    "final-container-storage": {
+      "at": "2026-11-03T05:20:45.349152+00:00",
+      "containers": [
+        {
+          "name": "infrapulse-vm2-step7-postgres-1",
+          "status": "running",
+          "health": "healthy",
+          "restart_count": 0,
+          "restart_policy": "unless-stopped",
+          "persistent_mounts": [
+            {
+              "type": "volume",
+              "name": "infrapulse-vm2-step7_postgres_data",
+              "target": "/var/lib/postgresql",
+              "rw": true
+            }
+          ],
+          "published_ports": {}
+        },
+        {
+          "name": "infrapulse-vm2-step7-prometheus-1",
+          "status": "running",
+          "health": "healthy",
+          "restart_count": 0,
+          "restart_policy": "unless-stopped",
+          "persistent_mounts": [
+            {
+              "type": "volume",
+              "name": "infrapulse-vm2-step7_prometheus_data",
+              "target": "/prometheus",
+              "rw": true
+            }
+          ],
+          "published_ports": {
+            "9090/tcp": [
+              {
+                "host": "127.0.0.1",
+                "port": "9090"
+              }
+            ]
+          }
+        },
+        {
+          "name": "infrapulse-vm2-step7-grafana-1",
+          "status": "running",
+          "health": "healthy",
+          "restart_count": 0,
+          "restart_policy": "unless-stopped",
+          "persistent_mounts": [
+            {
+              "type": "volume",
+              "name": "infrapulse-vm2-step7_grafana_data",
+              "target": "/var/lib/grafana",
+              "rw": true
+            }
+          ],
+          "published_ports": {
+            "3000/tcp": [
+              {
+                "host": "127.0.0.1",
+                "port": "3000"
+              }
+            ]
+          }
+        },
+        {
+          "name": "infrapulse-vm2-step7-management-1",
+          "status": "running",
+          "health": "healthy",
+          "restart_count": 0,
+          "restart_policy": "unless-stopped",
+          "persistent_mounts": [],
+          "published_ports": {
+            "3000/tcp": [
+              {
+                "host": "127.0.0.1",
+                "port": "3001"
+              }
+            ],
+            "3443/tcp": [
+              {
+                "host": "172.16.0.4",
+                "port": "3443"
+              }
+            ]
+          }
+        },
+        {
+          "name": "infrapulse-vm2-step7-ingest-1",
+          "status": "running",
+          "health": "healthy",
+          "restart_count": 0,
+          "restart_policy": "unless-stopped",
+          "persistent_mounts": [],
+          "published_ports": {
+            "8000/tcp": [
+              {
+                "host": "172.16.0.4",
+                "port": "8443"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "alerts-evaluation": {
+      "at": "2026-11-03T05:24:53.660796+00:00",
+      "rules": [
+        {
+          "uid": "infrapulse-cpu-high",
+          "name": "InfraPulse CPU High",
+          "health": "ok",
+          "state": "inactive",
+          "last_evaluation": "2026-11-03T05:24:30Z",
+          "instances": [
+            {
+              "state": "Normal",
+              "labels": {
+                "agent_id": "aecf877a-3884-43ec-bb52-bbfabcdd7cfc",
+                "alertname": "InfraPulse CPU High",
+                "grafana_folder": "InfraPulse",
+                "infrapulse_scope": "host",
+                "os": "linux",
+                "server_id": "ce46815d-0180-4a16-a02b-ab019add686d",
+                "severity": "warning",
+                "signal": "cpu"
+              },
+              "dashboard_url": "/d/infrapulse-linux-host?var-server_id=ce46815d-0180-4a16-a02b-ab019add686d&var-agent_id=aecf877a-3884-43ec-bb52-bbfabcdd7cfc"
+            }
+          ]
+        },
+        {
+          "uid": "infrapulse-memory-high",
+          "name": "InfraPulse Memory High",
+          "health": "ok",
+          "state": "inactive",
+          "last_evaluation": "2026-11-03T05:24:30Z",
+          "instances": [
+            {
+              "state": "Normal",
+              "labels": {
+                "agent_id": "aecf877a-3884-43ec-bb52-bbfabcdd7cfc",
+                "alertname": "InfraPulse Memory High",
+                "grafana_folder": "InfraPulse",
+                "infrapulse_scope": "host",
+                "os": "linux",
+                "server_id": "ce46815d-0180-4a16-a02b-ab019add686d",
+                "severity": "warning",
+                "signal": "memory"
+              },
+              "dashboard_url": "/d/infrapulse-linux-host?var-server_id=ce46815d-0180-4a16-a02b-ab019add686d&var-agent_id=aecf877a-3884-43ec-bb52-bbfabcdd7cfc"
+            }
+          ]
+        },
+        {
+          "uid": "infrapulse-disk-space-low",
+          "name": "InfraPulse Disk Space Low",
+          "health": "ok",
+          "state": "inactive",
+          "last_evaluation": "2026-11-03T05:24:30Z",
+          "instances": [
+            {
+              "state": "Normal",
+              "labels": {
+                "agent_id": "aecf877a-3884-43ec-bb52-bbfabcdd7cfc",
+                "alertname": "InfraPulse Disk Space Low",
+                "grafana_folder": "InfraPulse",
+                "infrapulse_scope": "host",
+                "os": "linux",
+                "server_id": "ce46815d-0180-4a16-a02b-ab019add686d",
+                "severity": "warning",
+                "signal": "disk",
+                "volume": "/"
+              },
+              "dashboard_url": "/d/infrapulse-linux-host?var-server_id=ce46815d-0180-4a16-a02b-ab019add686d&var-agent_id=aecf877a-3884-43ec-bb52-bbfabcdd7cfc"
+            },
+            {
+              "state": "Normal",
+              "labels": {
+                "agent_id": "aecf877a-3884-43ec-bb52-bbfabcdd7cfc",
+                "alertname": "InfraPulse Disk Space Low",
+                "grafana_folder": "InfraPulse",
+                "infrapulse_scope": "host",
+                "os": "linux",
+                "server_id": "ce46815d-0180-4a16-a02b-ab019add686d",
+                "severity": "warning",
+                "signal": "disk",
+                "volume": "/boot"
+              },
+              "dashboard_url": "/d/infrapulse-linux-host?var-server_id=ce46815d-0180-4a16-a02b-ab019add686d&var-agent_id=aecf877a-3884-43ec-bb52-bbfabcdd7cfc"
+            },
+            {
+              "state": "Normal",
+              "labels": {
+                "agent_id": "aecf877a-3884-43ec-bb52-bbfabcdd7cfc",
+                "alertname": "InfraPulse Disk Space Low",
+                "grafana_folder": "InfraPulse",
+                "infrapulse_scope": "host",
+                "os": "linux",
+                "server_id": "ce46815d-0180-4a16-a02b-ab019add686d",
+                "severity": "warning",
+                "signal": "disk",
+                "volume": "/boot/efi"
+              },
+              "dashboard_url": "/d/infrapulse-linux-host?var-server_id=ce46815d-0180-4a16-a02b-ab019add686d&var-agent_id=aecf877a-3884-43ec-bb52-bbfabcdd7cfc"
+            }
+          ]
+        },
+        {
+          "uid": "infrapulse-metrics-stale",
+          "name": "InfraPulse Metrics Stale",
+          "health": "ok",
+          "state": "inactive",
+          "last_evaluation": "2026-11-03T05:24:30Z",
+          "instances": [
+            {
+              "state": "Normal",
+              "labels": {
+                "agent_id": "aecf877a-3884-43ec-bb52-bbfabcdd7cfc",
+                "alertname": "InfraPulse Metrics Stale",
+                "grafana_folder": "InfraPulse",
+                "infrapulse_scope": "host",
+                "os": "linux",
+                "server_id": "ce46815d-0180-4a16-a02b-ab019add686d",
+                "severity": "warning",
+                "signal": "metrics_stale"
+              },
+              "dashboard_url": "/d/infrapulse-linux-host?var-server_id=ce46815d-0180-4a16-a02b-ab019add686d&var-agent_id=aecf877a-3884-43ec-bb52-bbfabcdd7cfc"
+            }
+          ]
+        }
+      ],
+      "contact_points": 0,
+      "external_notifications_configured": false
+    },
+    "management-live": {
+      "at": "2026-11-03T05:24:53.756002+00:00",
+      "principal": {
+        "kind": "user",
+        "subject": "user:1",
+        "role": "Admin",
+        "context": "vm2:10380f52-fcb8-459e-b05c-e220eefaaab0:org:1"
+      },
+      "server": {
+        "id": "ce46815d-0180-4a16-a02b-ab019add686d",
+        "name": "vm-2-linux-central",
+        "os": "linux",
+        "environment": "step7-lab",
+        "telemetry": {
+          "status": "Online",
+          "confidence_reason": "recent_success",
+          "source_health": "healthy",
+          "last_metric_seen_at": "2026-11-03T05:24:33.262Z",
+          "status_as_of": "2026-11-03T05:24:47.720Z"
+        }
+      },
+      "agent": {
+        "id": "aecf877a-3884-43ec-bb52-bbfabcdd7cfc",
+        "server_id": "ce46815d-0180-4a16-a02b-ab019add686d",
+        "lifecycle": "active",
+        "version": "infrapulse-installer/1.0.0",
+        "version_source": "agent_reported",
+        "last_applied_profile_version_id": "2365a93d-df3b-4ae5-8328-eba61d80f64b",
+        "last_config_report_result": "applied",
+        "telemetry": {
+          "status": "Online",
+          "confidence_reason": "recent_success",
+          "source_health": "healthy",
+          "last_metric_seen_at": "2026-11-03T05:24:33.262Z",
+          "status_as_of": "2026-11-03T05:24:47.720Z"
+        }
+      },
+      "assignment": {
+        "server_id": "ce46815d-0180-4a16-a02b-ab019add686d",
+        "profile_version_id": "2365a93d-df3b-4ae5-8328-eba61d80f64b",
+        "assigned_at": "2026-11-03T05:14:38.935Z"
+      },
+      "credential": {
+        "id": "ba2212e4-877e-4082-9e0b-832f5824d3a9",
+        "agent_id": "aecf877a-3884-43ec-bb52-bbfabcdd7cfc",
+        "server_id": "ce46815d-0180-4a16-a02b-ab019add686d",
+        "scopes": [
+          "metrics:write",
+          "provisioning:read",
+          "config:report"
+        ],
+        "status": "active",
+        "expires_at": "2026-12-03T05:15:13.720Z",
+        "issuance_request_id": "ee5eb54d-e7c3-478d-8735-802ef755ffec"
+      },
+      "plaintext_absent_from_metadata": true
+    },
+    "tls-certificate-metadata": {
+      "control": [
+        "notBefore=Nov  3 05:03:17 2026 GMT",
+        "notAfter=Feb  1 05:03:17 2027 GMT",
+        "sha256 Fingerprint=24:22:51:6F:10:F3:58:6B:47:8F:45:A2:53:B3:A8:47:D9:71:6B:82:E9:BC:31:99:C6:66:B2:78:43:D4:8E:B2"
+      ],
+      "gateway": [
+        "notBefore=Nov  3 05:03:17 2026 GMT",
+        "notAfter=Feb  1 05:03:17 2027 GMT",
+        "sha256 Fingerprint=9C:55:CA:F7:F2:03:15:60:F6:81:96:C0:7B:40:C4:9B:43:B1:20:66:C9:FF:DE:68:66:62:07:22:34:30:DA:5B"
+      ]
+    },
+    "temporary-users-cleanup": {
+      "at": "2026-11-03T05:26:13.853395+00:00",
+      "removed_test_users": [
+        {
+          "id": 2,
+          "role": "viewer",
+          "removed_authorized_temporary_account": true
+        },
+        {
+          "id": 3,
+          "role": "editor",
+          "removed_authorized_temporary_account": true
+        }
+      ],
+      "real_admin_and_agent_preserved": true
+    }
+  },
+  "agent_log_summary": {
+    "error_lines": 0,
+    "known_fielddrop_deprecation_warning": true,
+    "log_mode": "0o600"
+  },
+  "no_vm_reboot": true,
+  "temporary_helper_active": false,
+  "baseline_source_commit": "e6bd0097967a389f130940672573af310e0af610",
+  "uncommitted_integration_fix": "Verified Prometheus HTTPS scrape config/CA mount + bounded stdlib renderer; base HTTP unchanged",
+  "verification_scope": {
+    "primary_linux_flow": true,
+    "windows_native": false,
+    "separate_agent_host": false,
+    "production_acceptance": false,
+    "reboot_fault_or_stress_tests": false,
+    "external_notifications": false,
+    "vm1_contact": false,
+    "temporary_helper_tunnel_closed": true
+  },
+  "browser_observations": {
+    "origin": "allowlisted transcription of actual DSH browser tool results, not mocked replies",
+    "real_admin_login": true,
+    "me": {
+      "status": 200,
+      "kind": "user",
+      "subject": "user:1",
+      "role": "Admin"
+    },
+    "onboarding_from_ui": [
+      "Add Server",
+      "Register Agent with confirmation",
+      "Inspect/assign published profile",
+      "Explicit profile acceptance",
+      "Issue credential once",
+      "Actual provisioning preview",
+      "Native Linux installation",
+      "Observe Monitoring",
+      "Click existing Linux dashboard"
+    ],
+    "provisioning_preview": {
+      "expected_ids_and_profile": true,
+      "actual_private_https_origins": true,
+      "commands_key_free": true,
+      "private_ca_flags": true,
+      "no_installation_claim": true
+    },
+    "key_after_modal_closed": {
+      "dom_absent": true,
+      "url_absent": true,
+      "local_storage_absent": true,
+      "session_storage_absent": true
+    },
+    "issuance_replay": {
+      "status": 409,
+      "code": "secret_already_issued",
+      "no_plaintext": true,
+      "cache_control": "no-store"
+    },
+    "dashboard": {
+      "uid": "infrapulse-linux-host",
+      "provisioned": true,
+      "server_id": "ce46815d-0180-4a16-a02b-ab019add686d",
+      "agent_id": "aecf877a-3884-43ec-bb52-bbfabcdd7cfc",
+      "actual_panel_queries": 16,
+      "all_query_statuses": 200,
+      "all_have_values": true,
+      "datasource_health_status": 200,
+      "disk_charts_rendered_after_scroll": true
+    },
+    "roles": [
+      {
+        "grafana_role": "Viewer",
+        "subject": "user:2",
+        "management_role": "Viewer",
+        "inventory_read": 200,
+        "credential_metadata": 403,
+        "create_server": 403
+      },
+      {
+        "grafana_role": "Editor",
+        "subject": "user:3",
+        "management_role": "Operator",
+        "inventory_read": 200,
+        "credential_metadata": 403,
+        "create_server": 403
+      }
+    ],
+    "admin_session_restored": true
+  },
+  "private_transfer_image_manifest": [
+    {
+      "tag": "infrapulse-vm2-ops:20261103",
+      "local_id": "sha256:99ab43e1b03c5b4c8af0eb0cf783899897a73eefd4e0e1e0b65c77c46ab96c26",
+      "config_sha256": "70d3f1c9e67ede4fab5ca42ce65351dfa54faacdb79e8fcfea7dc3dfa091d38e",
+      "rootfs_sha256": "c46862288a49cc7387e82814ede23c106792bec9c274b95c3adee6e63845c026"
+    },
+    {
+      "tag": "infrapulse-vm2-management-runtime:20261103",
+      "local_id": "sha256:c7940025a749d7023ec75ee3b8204dac37fb47ba1f6f367dace75145fcc30a5c",
+      "config_sha256": "d0274110a6f6a72ed77469b4d01fc0422ace0c201a7a422ad9d62ff087a6501f",
+      "rootfs_sha256": "bcc0446f3e1c35fc92651faedb79e9e70d6253669fbb1e2fac5112cc3a542693"
+    },
+    {
+      "tag": "infrapulse-vm2-gateway-runtime:20261103",
+      "local_id": "sha256:6eb196159980aeecb500349b0a6ed48d3e49a5a3f650815207ba89c4246573a1",
+      "config_sha256": "6ea9b7010c8b81452283a957b6fdfa5ba54df392f68af687425deef7a0048765",
+      "rootfs_sha256": "f50255d72c1c7502f666451946129d6c9d365eae3e8682c28eb73c8bbe9ed0da"
+    }
+  ],
+  "deployed_source_artifact_manifest": {
+    "source_commit": "e6bd0097967a389f130940672573af310e0af610",
+    "files": [
+      {
+        "path": "source/agents/telegraf/common/agentctl.py",
+        "bytes": 17107,
+        "sha256": "75599381e0b53ba6555ff5d2a6f06c7ed9bc7b32c148cee56fa90a5ebc2139e6"
+      },
+      {
+        "path": "source/agents/telegraf/linux/infrapulse-telegraf.service",
+        "bytes": 1054,
+        "sha256": "43c269d45d959b03690bc58f9474a355b6ad890f5840e9b274f85eca3ae6f2cc"
+      },
+      {
+        "path": "source/agents/telegraf/linux/install.sh",
+        "bytes": 1554,
+        "sha256": "5d763c5b82fbea50a45b755bebe2469829516e319c592697a11328cdde55eada"
+      },
+      {
+        "path": "source/agents/telegraf/linux/lifecycle.py",
+        "bytes": 37484,
+        "sha256": "da5140dccfcc81681fe93b77945811dcdde8a1f55773ab7a6bcf988fd94ae9ca"
+      },
+      {
+        "path": "source/agents/telegraf/linux/uninstall.sh",
+        "bytes": 315,
+        "sha256": "ab1bebdb45a818104bb0ed6f9a616ce8e43cb6d330a4ca1f03c2fb5d96898ad2"
+      },
+      {
+        "path": "source/agents/telegraf/profiles/linux-base.json",
+        "bytes": 167,
+        "sha256": "bccca68152db339808e8b37307c2fa000ce6a382f7f998e7877a292568e2be1f"
+      },
+      {
+        "path": "source/agents/telegraf/profiles/windows-base.json",
+        "bytes": 169,
+        "sha256": "a411a8ab0f542e1ea68ebd96e567f2a43aa54d605d2749e867652f6c74f04776"
+      },
+      {
+        "path": "source/agents/telegraf/templates/agent.toml.tpl",
+        "bytes": 609,
+        "sha256": "2e2c56a2be893d14c10728c5bd888b8aa7096249c12f3547077adc7871ebfe80"
+      },
+      {
+        "path": "source/agents/telegraf/templates/linux/cpu.toml",
+        "bytes": 100,
+        "sha256": "cfa71fe9cad425373248374a407b1d682d0f3756ffe549fadcda6dd1b07c5e86"
+      },
+      {
+        "path": "source/agents/telegraf/templates/linux/disk.toml",
+        "bytes": 77,
+        "sha256": "35210b10a7934dbc77de613b89a7a7541adea7694da9aedc726f662018395708"
+      },
+      {
+        "path": "source/agents/telegraf/templates/linux/memory.toml",
+        "bytes": 31,
+        "sha256": "65905ba93eda110fe0ff0bd2554c9d66bef9489d42c99c17b6723985b6682305"
+      },
+      {
+        "path": "source/agents/telegraf/templates/linux/network.toml",
+        "bytes": 33,
+        "sha256": "c79ca5dc0034d21b607af0db97fea1c7a768bef033ba52066b40250592acad58"
+      },
+      {
+        "path": "source/agents/telegraf/templates/linux/system.toml",
+        "bytes": 124,
+        "sha256": "f8c0c80587c2fa6912e24539566d608e0d2c9f15118b7a56b5515c94d50c0ed7"
+      },
+      {
+        "path": "source/agents/telegraf/templates/output-http.toml.tpl",
+        "bytes": 908,
+        "sha256": "768c99646e0e1a0496049604c209a992e4bd9d336966a7815e7025d547c4062d"
+      },
+      {
+        "path": "source/agents/telegraf/templates/windows/cpu.toml",
+        "bytes": 376,
+        "sha256": "187ded3d3bbecff3d20a608feca77f3974a85955d911996305f57f5435bf91f0"
+      },
+      {
+        "path": "source/agents/telegraf/templates/windows/disk.toml",
+        "bytes": 418,
+        "sha256": "a09a510646e1e9eee51e8d0f41a08cb0aae56126b62e0d913b5d52c0f8d9b465"
+      },
+      {
+        "path": "source/agents/telegraf/templates/windows/memory.toml",
+        "bytes": 15,
+        "sha256": "f2698a67561d1187784bc52c3195798312a3d463ebf39791745d31d9e2fea9e0"
+      },
+      {
+        "path": "source/agents/telegraf/templates/windows/network.toml",
+        "bytes": 116,
+        "sha256": "478e32b503a0ed141953717570bc9ed186bc966aa18f4caff45c4e430ad5a407"
+      },
+      {
+        "path": "source/agents/telegraf/templates/windows/system.toml",
+        "bytes": 465,
+        "sha256": "81fcfa637b61728793dde8e95d41896d37ca026d3eda04b8fc184c224717a1c0"
+      },
+      {
+        "path": "source/agents/telegraf/tests/test_linux_paths.py",
+        "bytes": 2093,
+        "sha256": "16975f5278bf0b652dbde70b3d71c27a7f6be8b5ad3f783421c6c95137fb0923"
+      },
+      {
+        "path": "source/agents/telegraf/tests/test_linux_startup.py",
+        "bytes": 17811,
+        "sha256": "bbe34bf849c28a2f13d1b0fca94b3c1c1ac237cce8a91c007629417f5098f24c"
+      },
+      {
+        "path": "source/agents/telegraf/windows/AgentLifecycle.psm1",
+        "bytes": 21582,
+        "sha256": "348260ac37be8bdc7c35470fd8ae25a811ae03ddde0938efcd65427c1a0aad95"
+      },
+      {
+        "path": "source/agents/telegraf/windows/install.ps1",
+        "bytes": 998,
+        "sha256": "b83930bcdb2f30e55d05d710c572e70e08bef5d0eaa3745c24f60145eff01769"
+      },
+      {
+        "path": "source/agents/telegraf/windows/uninstall.ps1",
+        "bytes": 350,
+        "sha256": "d7672f6d5d29f2a388639fdb33fc8a8e851ea62f0801af8c4e707e11d1309c62"
+      },
+      {
+        "path": "source/apps/grafana-app/dist/60.js",
+        "bytes": 80064,
+        "sha256": "decac74a8789567cad43b8e6be3a0d203a85052c66cd2ed5a69f39524dad085a"
+      },
+      {
+        "path": "source/apps/grafana-app/dist/60.js.map",
+        "bytes": 176987,
+        "sha256": "20d9af1713fa3cf70aef0b6602d19df6f869fa0231eb7806b2d5f9c8d42ee715"
+      },
+      {
+        "path": "source/apps/grafana-app/dist/651.js",
+        "bytes": 1448,
+        "sha256": "e6c6167ba29ae6ae45505a58b34e9df3d56c9419ef59c43619efd0138bf2fbbf"
+      },
+      {
+        "path": "source/apps/grafana-app/dist/651.js.map",
+        "bytes": 60829,
+        "sha256": "0f4d893e7b63b8f81b30c40aee52a4c436c41df80d56773c21c34c2a633779dd"
+      },
+      {
+        "path": "source/apps/grafana-app/dist/CHANGELOG.md",
+        "bytes": 250,
+        "sha256": "3f89d52d29102f6a00616ebe479b9e638df378455762caabd1a38bef6ab1d3ae"
+      },
+      {
+        "path": "source/apps/grafana-app/dist/gpx_infrapulse_linux_amd64",
+        "bytes": 28299424,
+        "sha256": "12051c3b16b8c8c454424dee47b84096c401e362df46144b7b38ff96b77ad4fb"
+      },
+      {
+        "path": "source/apps/grafana-app/dist/img/logo.svg",
+        "bytes": 296,
+        "sha256": "5a85e11665b970adc870906ebe79b136fa4d574ab55387c51c79ffd3de56c626"
+      },
+      {
+        "path": "source/apps/grafana-app/dist/LICENSE",
+        "bytes": 11356,
+        "sha256": "c5accbbd8546e94c34aed24afe689a617627d18eed5a6c48277e48db57c23851"
+      },
+      {
+        "path": "source/apps/grafana-app/dist/module.js",
+        "bytes": 3248,
+        "sha256": "fb3e544c8730892bec656a77a8d317f3ca5a19633adabfdb782a5718b56b842d"
+      },
+      {
+        "path": "source/apps/grafana-app/dist/module.js.map",
+        "bytes": 15494,
+        "sha256": "6c23683e008e5d995a994d4f09ea5e91c74738d5e4eb04d971b1f0610a84f3d4"
+      },
+      {
+        "path": "source/apps/grafana-app/dist/plugin.json",
+        "bytes": 2525,
+        "sha256": "95894d8446ad960154332e0ed06ff9007f88d937ba73856284b26b5e7bc8cc12"
+      },
+      {
+        "path": "source/apps/grafana-app/dist/README.md",
+        "bytes": 4413,
+        "sha256": "211c219c2401cc1302e1e8c437fc57389897ceb6dcd33488beb2f7fed4b349a9"
+      },
+      {
+        "path": "source/apps/grafana-app/provisioning/app.yaml",
+        "bytes": 300,
+        "sha256": "bd9c465e521ab2552cc5b95d7782b63b1b34ecd9c2b6b6c051d90a2dc3eecaf0"
+      },
+      {
+        "path": "source/deploy/compose/compose.agent-tls.yaml",
+        "bytes": 3459,
+        "sha256": "9db3d53b3258d3c6decdd27a293ba7a88bd8b8020847f24631fee90964a5c4cc"
+      },
+      {
+        "path": "source/deploy/compose/compose.grafana-app.yaml",
+        "bytes": 4094,
+        "sha256": "ddb7e5ebe89ffaf0cf7b89d81340ec3410f14115016891d4396479beb78d7fa3"
+      },
+      {
+        "path": "source/deploy/compose/compose.yaml",
+        "bytes": 11939,
+        "sha256": "df0f535dca8d6d4f7c4202041527e051d8670ddc8b69bb0b7b14a29f8d2f193d"
+      },
+      {
+        "path": "source/deploy/scripts/render-prometheus-tls.py",
+        "bytes": 2567,
+        "sha256": "4d4eb7700d77eefcc079c71046ccbef4ee68a32df06e3c0d8dffc94e98120436"
+      },
+      {
+        "path": "source/observability/grafana/dashboards/infrapulse/linux-host.json",
+        "bytes": 34402,
+        "sha256": "6dca6d47e3aee4c1a8732c12dff0a2e3dbae6f0e982f4c3348b29c08519f8535"
+      },
+      {
+        "path": "source/observability/grafana/dashboards/infrapulse/windows-host.json",
+        "bytes": 36128,
+        "sha256": "8c30391d6e06ca6c6a9d733862d40bc8e018f582b0508e0c46d03fbc09c1fc95"
+      },
+      {
+        "path": "source/observability/grafana/provisioning/alerting/host-health.yml",
+        "bytes": 11098,
+        "sha256": "66fd9e8bcc5bba12e2659276646fc2880178d8f40bd077ea715066381c5c7317"
+      },
+      {
+        "path": "source/observability/grafana/provisioning/dashboards/providers.yml",
+        "bytes": 363,
+        "sha256": "b86e97fb3856a10ae9bb2abf2a9d77f2300db16a630054d45d37621bb6d6f629"
+      },
+      {
+        "path": "source/observability/grafana/provisioning/datasources/prometheus.yml",
+        "bytes": 257,
+        "sha256": "0124990c03078c6b0680fb5ee16a372097c0f5b7835217acf27ed97d06d59da1"
+      },
+      {
+        "path": "source/observability/prometheus/prometheus.yml",
+        "bytes": 286,
+        "sha256": "c95f37df111219b0820a3006d113a5f4013dab6d203f737ace494ec7a698505e"
+      }
+    ],
+    "archive_bytes": 10718860,
+    "archive_sha256": "6b6cf73d50098739bdbea063f1454bc0022836a02101ba080f44ce0143852e02"
+  },
+  "screenshots": [
+    {
+      "path": "docs/testing/evidence/step7-vm2-monitoring-20261103.png",
+      "bytes": 372301,
+      "sha256": "07c1612341a5eec0981280b922a9ff3cc088450ea8e02ba7f0a748820466423b"
+    },
+    {
+      "path": "docs/testing/evidence/step7-vm2-linux-dashboard-20261103.png",
+      "bytes": 350980,
+      "sha256": "9d27514156f94cd00aea97ec55b5480d0627009c09009b48082a596ea440fe1f"
+    },
+    {
+      "path": "docs/testing/evidence/step7-vm2-linux-disks-20261103.png",
+      "bytes": 386865,
+      "sha256": "964a1ad0ba8b3f8272930557382cfea58ddee55a2558eca68d1589d0efc4cef0"
+    }
+  ],
+  "final_readonly_handoff": {
+    "at": "2026-11-03T05:35:49.379540+00:00",
+    "all_five_healthy": true,
+    "container_restart_counts": {
+      "infrapulse-vm2-step7-postgres-1": 0,
+      "infrapulse-vm2-step7-prometheus-1": 0,
+      "infrapulse-vm2-step7-grafana-1": 0,
+      "infrapulse-vm2-step7-management-1": 0,
+      "infrapulse-vm2-step7-ingest-1": 0
+    },
+    "agent_telemetry": {
+      "status": "Online",
+      "confidence_reason": "recent_success",
+      "source_health": "healthy",
+      "last_metric_seen_at": "2026-11-03T05:35:42.494Z",
+      "status_as_of": "2026-11-03T05:35:48.980Z"
+    },
+    "sample_timestamp": "1793684130.278",
+    "agent_service": [
+      "NRestarts=0",
+      "ActiveState=active"
+    ],
+    "boot_id_unchanged": true,
+    "helper_inactive": true
+  }
+}

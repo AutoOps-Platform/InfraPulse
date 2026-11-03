@@ -2,6 +2,8 @@
 
 ## Trạng thái hiện tại
 
+**Bước7 — vm-2 (2026-11-03): đã deploy Central Stack + InfraPulse App và kiểm chứng primary Linux Monitoring & Management E2E thật.** Genuine Grafana UI → NestJS/PostgreSQL → credential/provisioning → native Telegraf → HTTPS Gateway → Prometheus → dashboard và telemetry/4 alert rules đã có bằng chứng. Xem [runbook/URL vm-2](<docs/deployment/central-vm2-step7.md>) và [biên bản có giới hạn](<docs/testing/step7-vm2-20261103.md>). Chưa Windows/multihost/production qualification; không reboot hay thay đổi vm-1. Các kết quả Bước1–3 dưới đây là **lịch sử**, không mô tả đầy đủ deployment vm-2 hiện tại.
+
 **Bước 1 — Central Infrastructure: ba container đang chạy healthy; đã chạy nghiệm thu ngày 2026-10-30 sau khi người dùng cho phép.** Kết quả: **11 PASS, 2 PARTIAL, 1 FAIL**. CI-01 chưa đạt hợp đồng không tự tạo bind source trên Docker Desktop/Windows; CI-07/CI-09 đã kiểm chứng bằng API nhưng chưa thao tác browser Explore/Import. Xem [báo cáo thực thi](<docs/deployment/2026-10-30-central-infrastructure-acceptance.md>) và [ma trận nghiệm thu](<docs/deployment/central-infrastructure.md#9-ma-trận-nghiệm-thu-thực-tế>).
 
 Đã tạo [environment riêng](<.env>) với hai password ngẫu nhiên độc lập và ACL hạn chế; không hiển thị credential. SQL backup/isolated restore đã pass; dữ liệu thử đã dọn, ba volume thật và backup host được giữ. Credential, backup và artifact chạy thử không được đưa vào Git.
@@ -82,7 +84,7 @@ Dừng bằng `docker compose @dc down`, kiểm tra exit code; khởi động l�
 - [Prometheus config](<observability/prometheus/prometheus.yml>) — self-scrape và scrape Gateway.
 - [Runbook Gateway](<docs/deployment/ingestion-gateway.md>) và [nghiệm thu Gateway](<docs/deployment/ingestion-gateway-acceptance.md>) — dev/codegen, sender, E2E, UI/native isolation, retry/logging và giới hạn lab.
 - [Grafana datasource](<observability/grafana/provisioning/datasources/prometheus.yml>) và [dashboard provider](<observability/grafana/provisioning/dashboards/providers.yml>).
-- [Dashboard placeholder](<observability/grafana/dashboards/.gitkeep>) — chưa có dashboard JSON triển khai sẵn; dashboard thử đã dọn.
+- Dashboard hiện có: [Linux](<observability/grafana/dashboards/infrapulse/linux-host.json>), [Windows](<observability/grafana/dashboards/infrapulse/windows-host.json>); [App Plugin](<apps/grafana-app/README.md>) và [Agent runbook](<docs/deployment/telegraf-agent.md>). Windows source/dashboard không thay bằng chứng metrics Windows thật.
 - [Runbook và ma trận CI-01–CI-14](<docs/deployment/central-infrastructure.md>) — startup, auth, failure recovery, persistence, backup/restore, troubleshooting.
 - [Báo cáo nghiệm thu 2026-10-30](<docs/deployment/2026-10-30-central-infrastructure-acceptance.md>) — bằng chứng, phần pass và giới hạn còn lại.
 - [Thiết kế](<docs/superpowers/specs/2026-10-30-central-infrastructure-design.md>), [kế hoạch sáu task](<docs/superpowers/plans/2026-10-30-central-infrastructure.md>) và [định hướng dự án](<INTRODUCT.md>).

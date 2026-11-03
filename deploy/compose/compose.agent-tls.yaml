@@ -1,6 +1,21 @@
 # Optional direct TLS for Step 4. Requires Docker Compose >= 2.24.4 (!override).
 # Existing compose.yaml keeps HTTP-only lab defaults; no Nginx is introduced.
 services:
+  # Gateway switches its entire ASGI listener to HTTPS. Keep self-monitoring
+  # verified too; render a NEW config with deploy/scripts/render-prometheus-tls.py.
+  prometheus:
+    volumes:
+      - type: bind
+        source: ${PROMETHEUS_TLS_SCRAPE_CONFIG_FILE:?Render a verified HTTPS Gateway scrape configuration first}
+        target: /etc/prometheus/prometheus.yml
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${AGENT_GATEWAY_TLS_CA_FILE:?Gateway public CA PEM path required}
+        target: /etc/prometheus/ingestion-ca.pem
+        read_only: true
+        bind: {create_host_path: false}
+
   management:
     environment:
       MANAGEMENT_AGENT_TLS_CERT_FILE: /run/secrets/agent-control-cert
