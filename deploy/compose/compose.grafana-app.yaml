@@ -1,0 +1,73 @@
+# Opt-in Step 6. Build apps/grafana-app/dist first; never mount source/private keys
+# into a frontend build. Combine AFTER compose.yaml (and optional agent TLS overlay).
+services:
+  grafana:
+    environment:
+      # Development/lab only: production must sign the same reviewed plugin artifact
+      # and remove this exact-ID exception. No wildcard unsigned plugin permission.
+      GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: infrapulse-infrapulse-app
+      # Grafana13 filters custom environment from backend children by default.
+      # This exact trusted backend receives the container environment (not merely
+      # INFRAPULSE_*); never use a wildcard or include unrelated plugins here.
+      GF_PLUGINS_FORWARD_HOST_ENV_VARS: infrapulse-infrapulse-app
+      # Separate root avoids mounting a missing child under the base read-only
+      # /etc/grafana/provisioning bind. Existing provisioning families stay intact.
+      GF_PATHS_PROVISIONING: /etc/infrapulse-provisioning
+      GF_SERVER_ROOT_URL: ${INFRAPULSE_GRAFANA_ISSUER:?Enroll the actual Grafana root URL including trailing slash}
+      INFRAPULSE_IDENTITY_MODE: grafana13-id-token
+      INFRAPULSE_ACCEPT_EXPERIMENTAL_IDENTITY: ${INFRAPULSE_ACCEPT_EXPERIMENTAL_IDENTITY:?Explicitly review Grafana 13.3.0 identity maturity before enabling}
+      INFRAPULSE_GRAFANA_ISSUER: ${INFRAPULSE_GRAFANA_ISSUER:?Required}
+      INFRAPULSE_GRAFANA_JWKS_URL: ${INFRAPULSE_GRAFANA_JWKS_URL:?Use this instance fixed trusted JWKS endpoint}
+      INFRAPULSE_GRAFANA_ORG_ID: ${INFRAPULSE_GRAFANA_ORG_ID:?Enroll the actual organization ID}
+      INFRAPULSE_GRAFANA_NAMESPACE: ${INFRAPULSE_GRAFANA_NAMESPACE:?Enroll the actual organization namespace}
+      INFRAPULSE_GRAFANA_AUTH_METHODS: ${INFRAPULSE_GRAFANA_AUTH_METHODS:?Explicit reviewed authentication methods}
+      INFRAPULSE_ALLOW_LOOPBACK_GRAFANA_HTTP: ${INFRAPULSE_ALLOW_LOOPBACK_GRAFANA_HTTP:-false}
+      INFRAPULSE_MANAGEMENT_URL: http://management:3000
+      INFRAPULSE_ALLOW_PRIVATE_HTTP: "true"
+      INFRAPULSE_ASSERTION_ISSUER: ${INFRAPULSE_ASSERTION_ISSUER:?Match Management admin trust issuer}
+      INFRAPULSE_ASSERTION_AUDIENCE: ${INFRAPULSE_ASSERTION_AUDIENCE:?Match Management admin trust audience}
+      INFRAPULSE_ASSERTION_KEY_ID: ${INFRAPULSE_ASSERTION_KEY_ID:?Match Management admin trust key ID}
+      INFRAPULSE_ASSERTION_CONTEXT: ${MANAGEMENT_GRAFANA_CONTEXT:?Match this enrolled instance context}
+      INFRAPULSE_ASSERTION_KEY_FILE: /run/infrapulse-grafana-assertion.pem
+      INFRAPULSE_AGENT_CONTROL_URL: ${INFRAPULSE_AGENT_CONTROL_URL:?Agent-facing HTTPS Management origin}
+      INFRAPULSE_GATEWAY_ORIGIN: ${AGENT_GATEWAY_ORIGIN:?Must match actual provisioned HTTPS Gateway origin}
+    volumes:
+      - type: bind
+        source: ../../apps/grafana-app/dist
+        target: /var/lib/grafana/plugins/infrapulse-infrapulse-app
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${INFRAPULSE_ASSERTION_KEY_FILE:?Absolute operator-owned host PKCS8 Ed25519 private key file}
+        target: /run/infrapulse-grafana-assertion.pem
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ../../apps/grafana-app/provisioning
+        target: /etc/infrapulse-provisioning/plugins
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ../../observability/grafana/provisioning/datasources
+        target: /etc/infrapulse-provisioning/datasources
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ../../observability/grafana/provisioning/dashboards
+        target: /etc/infrapulse-provisioning/dashboards
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ../../observability/grafana/provisioning/alerting
+        target: /etc/infrapulse-provisioning/alerting
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on:
+      management:
+        condition: service_healthy

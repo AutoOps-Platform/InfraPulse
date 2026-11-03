@@ -1,0 +1,206 @@
+{
+  "schema_version": 1,
+  "report_date": "2026-11-03",
+  "time_zone": "Asia/Saigon",
+  "overall_result": "partial_recovery_pending_operator",
+  "production_acceptance": false,
+  "provenance": {
+    "kind": "allowlisted_transcription_of_observed_tool_results",
+    "note": "Browser/SSH observations were captured during the authorized isolated lab. Private raw logs remain on vm-1 and have not been exported after the sudo restriction. This is not a new live-state check.",
+    "baseline_source_commit": "b6f7fc475fb3eab359d6622195a4e1ab37520f1f",
+    "step6_changes_committed": false
+  },
+  "environment": {
+    "ssh_alias": "vm-1",
+    "os": "Ubuntu 24.04 x86_64",
+    "vcpus": 2,
+    "memory_mib": 3856,
+    "grafana_version": "13.3.0",
+    "telegraf_version": "1.38.2",
+    "plugin_id": "infrapulse-infrapulse-app",
+    "grafana_org_id": 1,
+    "public_application_ports_added": false,
+    "external_notifications_sent": false,
+    "grafana_identity_mode": "explicitly_opted_in_experimental_grafana13_id_token"
+  },
+  "identities": {
+    "original_server_id": "76c61c9a-e845-474e-932b-c90b6ee86920",
+    "original_agent_id": "4e7ea3d4-da72-49ee-a35a-539d3e6865e2",
+    "linux_test_server_id": "7e38e852-1840-4b0c-a4d1-e36a4fe31e68",
+    "linux_test_agent_id": "88638863-76ff-40e2-95c4-8cdb4737ef18",
+    "windows_inventory_server_id": "9175700b-bffd-4f0a-9d31-031579b50420",
+    "windows_inventory_agent_id": "cf2bafa8-f69a-47a2-9fdb-07f8274aea44",
+    "linux_base_version_id": "7d4fb804-276e-40c0-aa2c-0ebb618eb050",
+    "linux_base_checksum": "a6c6bfba54493d5e32d7ed2d42c0a4ff0e8bbc1521110b6a160757ad935c7156"
+  },
+  "observed_checks": {
+    "grafana_real_identity": {
+      "admin": {"http_status": 200, "subject": "user:1", "management_role": "Admin"},
+      "viewer": {"http_status": 200, "subject": "user:2", "management_role": "Viewer"},
+      "editor": {"http_status": 200, "subject": "user:3", "management_role": "Operator"},
+      "viewer_editor_read_inventory": 200,
+      "viewer_editor_direct_mutation": 403,
+      "viewer_editor_credential_metadata": 403,
+      "viewer_provisioning_preview": 403,
+      "anonymous_management_request": 401,
+      "browser_forged_identity_headers_changed_principal": false
+    },
+    "ui_and_inventory": {
+      "seven_pages_rendered": true,
+      "initial_overview": {"unarchived_servers": 1, "online_servers": 1, "agents": 1},
+      "real_server_create_edit_detail": true,
+      "reserved_metadata_field_blocked": true,
+      "additional_pagination_fixture_servers": 19,
+      "inventory_page_one_rows": 20,
+      "inventory_page_two_rows": 1,
+      "page_overlap": false,
+      "previous_restored_order": true,
+      "filter_a_b_a_reset_cursor": true,
+      "literal_prefix_not_substring": true,
+      "windows_filter_returned_one_fixture": true,
+      "archive_and_retire_acceptance": "not_completed"
+    },
+    "credentials": {
+      "issue_once_modal_observed": true,
+      "secret_absent_after_close_and_absent_from_url_local_storage_session_storage": true,
+      "past_utc_expiration_blocked": true,
+      "cancel_confirmation_did_not_issue": true,
+      "same_issuance_operation_replay": {"status": 409, "code": "secret_already_issued", "secret_returned": false, "cache_control": "no-store"},
+      "rotation": {
+        "predecessor_retire_at": "2026-11-02T19:04:31.698Z",
+        "before_cutoff_both_provisioning_status": 200,
+        "native_agent_successor_update_exit": 0,
+        "report_pending_after_update": false,
+        "after_cutoff_observed_at": "2026-11-02T19:05:46.259560Z",
+        "old_key_provisioning_status": 401,
+        "old_key_gateway_status": 401,
+        "new_key_provisioning_status": 200,
+        "new_key_gateway_empty_body_status": 400,
+        "gateway_probe_note": "400 is rejection of an empty invalid wire payload after authentication, not successful metric delivery. Actual Linux metrics were checked separately."
+      },
+      "response_lost_after_commit": {
+        "real_post_status_before_discard": 201,
+        "requests_forwarded": 1,
+        "secret_read_or_displayed": false,
+        "ui_reported_uncertain": true,
+        "new_operation_blocked_until_fresh_revoked_metadata_and_explicit_ack": true,
+        "metadata_inspection_found_matching_operation": true,
+        "revoke_confirmed_by_fresh_metadata": true,
+        "automatic_replacement_issued": false
+      }
+    },
+    "onboarding_and_profiles": {
+      "linux_add_register_pin_issue_real_preview": true,
+      "windows_inventory_register_pin_issue_real_preview": true,
+      "preview_claimed_applied_or_online": false,
+      "concurrent_profile_pin_change": {"actual_assignment_changed": true, "conflict_visible": true, "installer_instructions_hidden": true, "retry_blocked": true, "original_assignment_restored": true, "temporary_key_revoked": true},
+      "windows_native_service_executed": false
+    },
+    "linux_metrics": {
+      "observed_at": "2026-11-02T18:33:23Z",
+      "matching_series": 309,
+      "nonempty_query_checks": 7,
+      "cpu_usage_active_percent": 9.80006555,
+      "mem_used_percent": 32.07585,
+      "root_disk_used_percent": 37.1418,
+      "system_uptime_seconds": 33396,
+      "uptime_sample_timestamp": 1793644380.136,
+      "dashboard_uid": "infrapulse-linux-host",
+      "dashboard_server_and_agent_variables_correct": true,
+      "plugin_showed_online_healthy_recent_success_and_applied_profile": true,
+      "simultaneous_multi_host_qualification": false
+    },
+    "linux_lifecycle": {
+      "safe_reinstall_exit": 0,
+      "config_update_exit": 0,
+      "wrong_binary_hash_rejected_without_pointer_change": true,
+      "different_identity_rejected_without_pointer_change": true,
+      "untrusted_management_ca_rejected_without_pointer_change": true,
+      "concurrent_install_lock_rejected_without_pointer_change": true,
+      "original_agent_temporarily_uninstalled_for_controlled_test_identity": true,
+      "startup_fix_acceptance_at": "2026-11-02T18:57:10.524688Z",
+      "malformed_toml_after_fix": {"installer_exit": 1, "previous_pointer_unchanged": true, "service_active": true, "transaction_cleared": true},
+      "valid_toml_unknown_plugin_after_fix": {"installer_exit": 1, "previous_pointer_restored": true, "service_active": true, "transaction_cleared": true},
+      "final_valid_update_exit": 0,
+      "startup_liveness_note": "Bounded offline TOML parsing plus two seconds sampled process liveness; not semantic/plugin readiness or metric-delivery proof."
+    },
+    "agent_lifecycle_authorization": {
+      "windows_inventory_agent_disabled_via_confirmation": true,
+      "its_credential_became_revoked": true,
+      "agent_reenabled_via_confirmation": true,
+      "reenable_restored_revoked_credential": false,
+      "telemetry_remained_unknown_never_seen": true
+    },
+    "alerts": {
+      "actual_product_rules_loaded": 4,
+      "rule_evaluation_health": "ok",
+      "cpu_memory_disk_normal_instances_observed": true,
+      "original_agent_metrics_stale_firing_observed": true,
+      "private_only_webhook_received_firing_at": "2026-11-02T18:38:37.522730Z",
+      "external_contact_point_configured": false,
+      "threshold_pressure_or_full_nodata_error_matrix_tested": false,
+      "recovery_resolution_verified": false
+    },
+    "management_dependency_outage": {
+      "independent_30_second_recovery_timer_armed": true,
+      "plugin_status": 503,
+      "plugin_code": "management_unavailable",
+      "finite_ui_error_and_retry_read_visible": true,
+      "after_restart_me_status": 200,
+      "after_restart_subject": "user:1"
+    }
+  },
+  "runtime_defects_fixed": [
+    "Exact-plugin Grafana host environment forwarding required for backend configuration",
+    "Grafana go-jose single audience string accepted only for exact enrolled organization",
+    "Linux instructions explicitly invoke bash for non-executable reviewed installer",
+    "Linux installer parses bounded TOML before activation and observes stable service before applied report/rollback acceptance"
+  ],
+  "regression_verification": {
+    "frontend_typecheck_build": "pass",
+    "eslint_zero_warnings": "pass",
+    "deployment_node_tests": {"pass": 2, "total": 2},
+    "go_test_fresh_suite": "pass",
+    "go_vet": "pass",
+    "linux_backend_build": "pass",
+    "linux_agent_tests_local_isolated_container": {"pass": 22, "total": 22},
+    "linux_agent_tests_on_vm": {"pass": 22, "total": 22},
+    "independent_four_fix_review": "no_scoped_findings_after_fixes; source_only"
+  },
+  "artifacts": {
+    "last_verified_runtime_go_backend_sha256": "632f607e5205cb36f24c3c87cfbbd7f5aad299846a4e2735ff804f99fedfb302",
+    "last_verified_linux_lifecycle_sha256": "da5140dccfcc81681fe93b77945811dcdde8a1f55773ab7a6bcf988fd94ae9ca",
+    "monitoring_screenshot": "grafana-app-monitoring-vm1-20261103.png",
+    "monitoring_screenshot_sha256": "06c617ecd65d4f954231027f4a6ff0e9607ff88aea7465a6e1bdeec39e24d756"
+  },
+  "recovery_status": {
+    "reboot_requested_at": "2026-11-02T19:13:49.193847Z",
+    "reboot_acceptance": "not_passed_as_end_to_end_acceptance",
+    "ssh_authentication_failed_after_reboot": true,
+    "operator_reported_manual_password_reset": true,
+    "further_reboot_tests_forbidden_without_separate_explicit_confirmation": true,
+    "last_read_only_check_after_access_restored": {"ssh": "available", "docker_service": "active", "agent_service": "active/running", "agent_restarts": 0},
+    "sudo_n": "password_required_at_last_successful_session",
+    "current_ssh_access": "unavailable_to_user_and_dsh_as_reported_2026_11_03_09_02",
+    "latest_dsh_read_only_ssh_preflight": "timed_out_before_any_recovery_action",
+    "latest_tcp_only_probe": "port_22_connects_but_no_ssh_banner_within_short_timeout; no_authentication_attempted",
+    "agent_only_candidate_prepared_and_reviewed_locally": true,
+    "agent_only_candidate_uploaded": false,
+    "additional_reboots_or_service_container_restarts_after_user_prohibition": false,
+    "original_agent_restoration": "pending_operator",
+    "test_fixture_and_account_cleanup": "not_completed",
+    "temporary_helper_and_alert_cleanup": "not_confirmed_after_reboot",
+    "operator_selected_scope": "agent_only_no_grafana_or_other_container_restart",
+    "recovery_script_apply_executed": false,
+    "backups_kept_root_private": true,
+    "backup_restore_executed": false
+  },
+  "remaining_gates": [
+    "Operator-approved original Agent restoration and explicit fixture/helper/routing cleanup",
+    "Dedicated authorized Windows machine: installation/service/PDH/metrics/reinstall/rollback/uninstall",
+    "Production signing and upstream Grafana identity maturity acceptance",
+    "Runtime org/instance replacement, login rename, subpath and JWKS rotation/dependency cache-expiry matrix",
+    "Full keyboard/theme/responsive/race accessibility matrix and long pagination/profile histories",
+    "Full alert threshold/NoData/Error/recovery/routing qualification, sustained load/soak and simultaneous multi-host isolation"
+  ]
+}

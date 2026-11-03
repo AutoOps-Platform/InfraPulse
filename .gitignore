@@ -43,5 +43,3 @@ test-results/
 /deploy/secrets/
 /services/management-backend/secrets/
 /services/management-backend/private/
-
-node_modules

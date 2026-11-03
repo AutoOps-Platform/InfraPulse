@@ -1,0 +1,72 @@
+{
+  "$schema": "https://grafana.com/schemas/plugin/v0.0.0/plugin.schema.json",
+  "type": "app",
+  "name": "InfraPulse",
+  "id": "infrapulse-infrapulse-app",
+  "backend": true,
+  "executable": "gpx_infrapulse",
+  "autoEnabled": false,
+  "info": {
+    "description": "Server and Agent management backed by the InfraPulse Management API",
+    "author": { "name": "InfraPulse" },
+    "keywords": ["infrapulse", "telegraf", "infrastructure", "management"],
+    "logos": { "small": "img/logo.svg", "large": "img/logo.svg" },
+    "links": [{ "name": "Project", "url": "https://github.com/AutoOps-Platform/InfraPulse" }],
+    "screenshots": [],
+    "version": "%VERSION%",
+    "updated": "%TODAY%"
+  },
+  "dependencies": { "grafanaDependency": ">=13.3.0 <13.4.0", "plugins": [] },
+  "includes": [
+    {
+      "type": "page",
+      "name": "Overview",
+      "path": "/a/infrapulse-infrapulse-app/overview",
+      "addToNav": true,
+      "defaultNav": true,
+      "role": "Viewer"
+    },
+    {
+      "type": "page",
+      "name": "Servers",
+      "path": "/a/infrapulse-infrapulse-app/servers",
+      "addToNav": true,
+      "role": "Viewer"
+    },
+    {
+      "type": "page",
+      "name": "Agents",
+      "path": "/a/infrapulse-infrapulse-app/agents",
+      "addToNav": true,
+      "role": "Viewer"
+    },
+    {
+      "type": "page",
+      "name": "Install Agent",
+      "path": "/a/infrapulse-infrapulse-app/install",
+      "addToNav": true,
+      "role": "Admin"
+    },
+    {
+      "type": "page",
+      "name": "API Keys",
+      "path": "/a/infrapulse-infrapulse-app/api-keys",
+      "addToNav": true,
+      "role": "Admin"
+    },
+    {
+      "type": "page",
+      "name": "Monitoring Profiles",
+      "path": "/a/infrapulse-infrapulse-app/profiles",
+      "addToNav": true,
+      "role": "Viewer"
+    },
+    {
+      "type": "page",
+      "name": "Monitoring",
+      "path": "/a/infrapulse-infrapulse-app/monitoring",
+      "addToNav": true,
+      "role": "Viewer"
+    }
+  ]
+}

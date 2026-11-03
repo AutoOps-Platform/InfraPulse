@@ -277,6 +277,58 @@ def systemctl(*arguments: str, required: bool = True) -> bool:
                failure="systemd " + operation + " failed; inspect the private local log and owned unit.")
 
 
+def service_snapshot(timeout: float) -> tuple[int, str, int]:
+    """Read only finite systemd metadata, never raw service diagnostics."""
+    failure = "cannot establish stable local service state; raw details were suppressed."
+    require(0 < timeout <= 0.5, failure)
+    names = ("ActiveState", "SubState", "MainPID", "InvocationID", "NRestarts")
+    try:
+        completed = subprocess.run(
+            ["systemctl", "show", "--no-pager", *("--property=" + name for name in names), UNIT_NAME],
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            check=False, timeout=timeout, env=clean_environment())
+        require(completed.returncode == 0 and len(completed.stdout) <= 4096, failure)
+        values = {}
+        for line in completed.stdout.decode("ascii", errors="strict").splitlines():
+            name, separator, value = line.partition("=")
+            require(separator == "=" and name in names and name not in values, failure)
+            values[name] = value
+        require(set(values) == set(names), failure)
+        require(values["ActiveState"] == "active" and values["SubState"] == "running", failure)
+        require(re.fullmatch(r"[1-9][0-9]{0,9}", values["MainPID"]) is not None
+                and re.fullmatch(r"[a-f0-9]{32}", values["InvocationID"]) is not None
+                and re.fullmatch(r"[0-9]{1,10}", values["NRestarts"]) is not None, failure)
+        return int(values["MainPID"]), values["InvocationID"], int(values["NRestarts"])
+    except (OSError, subprocess.TimeoutExpired, UnicodeError, Refusal):
+        raise Refusal(failure) from None
+
+
+def require_stable_service() -> None:
+    """Sample two seconds of same-process liveness, not plugin readiness/delivery.
+
+    Each query has at most 0.5s; the total budget is 3s including the initial
+    snapshot and a final confirmation after the two-second observation window.
+    """
+    failure = "local service did not remain stable during bounded startup observation."
+    deadline = time.monotonic() + 3.0
+    identity = None
+    stable_until = 0.0
+    while True:
+        before = time.monotonic()
+        require(before < deadline, failure)
+        current = service_snapshot(min(0.5, deadline - before))
+        after = time.monotonic()
+        require(after <= deadline, failure)
+        if identity is None:
+            identity = current
+            stable_until = after + 2.0
+        else:
+            require(current == identity, failure)
+            if before >= stable_until:
+                return
+        time.sleep(min(0.1, max(0.0, stable_until - after)))
+
+
 def ensure_account(create: bool) -> int:
     try:
         user = pwd.getpwnam(ACCOUNT)
@@ -498,6 +550,27 @@ def rendered_layout(stage: Path) -> None:
     safe_tree(stage)
 
 
+def validate_config_syntax(stage: Path) -> None:
+    """Bounded offline TOML syntax only; does not run Telegraf or validate plugins."""
+    # Defer the3.11-only module until main's finite minimum-version guard ran.
+    import tomllib
+    failure = "rendered configuration failed bounded TOML syntax validation; raw details were suppressed."
+    limit = 256 * 1024
+    try:
+        directory(stage)
+        directory(stage / "conf.d")
+        # Telegraf loads these separately, so do not concatenate duplicate tables.
+        for relative in ("telegraf.conf", "conf.d/inputs.conf", "conf.d/output.conf"):
+            path = stage / relative
+            require(regular(path).st_size <= limit, failure)
+            with path.open("rb") as stream:
+                data = stream.read(limit + 1)
+            require(len(data) <= limit, failure)
+            tomllib.loads(data.decode("utf-8", errors="strict"))
+    except (OSError, ValueError, UnicodeError, RecursionError, Refusal):
+        raise Refusal(failure) from None
+
+
 def install(options: argparse.Namespace) -> None:
     previous = inspect_root()
     template = unit_template()
@@ -578,6 +651,7 @@ def install(options: argparse.Namespace) -> None:
         run(prepare, timeout=180,
             failure="provisioning/rendering failed; check HTTPS trust, private key, pinned gateway and profile binding.")
         rendered_layout(stage)
+        validate_config_syntax(stage)
         atomic_bytes(stage / ".release-owner", RELEASE_OWNER.encode())
         make_dir(stage / "bin", 0o700)
         copy_binary(binary, stage / "bin/telegraf", expected_hash)
@@ -598,7 +672,7 @@ def install(options: argparse.Namespace) -> None:
         systemctl("daemon-reload")
         systemctl("enable", UNIT_NAME)
         systemctl("restart", UNIT_NAME)
-        systemctl("is-active", "--quiet", UNIT_NAME)
+        require_stable_service()
         journal.unlink()
         event("local activation accepted; ingestion has not been verified.")
         activated = True
@@ -622,7 +696,7 @@ def install(options: argparse.Namespace) -> None:
                     systemctl("enable" if was_enabled else "disable", UNIT_NAME)
                     if was_active:
                         systemctl("start", UNIT_NAME)
-                        systemctl("is-active", "--quiet", UNIT_NAME)
+                        require_stable_service()
                 event("previous local service state restored.")
             except BaseException:
                 rollback_ok = False
