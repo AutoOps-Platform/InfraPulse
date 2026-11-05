@@ -53,3 +53,5 @@ docs/
 /docs/Loop-run-log/
 /loop-run-log*.md
 /.agents/
+/services/aiops-server/.env.example
+/services/aiops-server/uv.lock
