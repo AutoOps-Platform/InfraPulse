@@ -43,3 +43,13 @@ test-results/
 /deploy/secrets/
 /services/management-backend/secrets/
 /services/management-backend/private/
+
+
+docs/
+
+/.superpowers/sdd/
+/.mnemon/
+/STATE.md
+/docs/Loop-run-log/
+/loop-run-log*.md
+/.agents/

@@ -30,3 +30,10 @@ Use the `codebase-memory` skill and the Code Graph MCP tools for structural code
 
 - Do not run `git add`, `git commit`, merge commits, or equivalent staging/commit operations unless the user explicitly authorizes them after reviewing the changes.
 - Keep unrelated working-tree changes intact and report them when relevant.
+
+## Loop Engineering & Session State
+
+- Before starting multi-step work, read `STATE.md` at the repository root (if present) to load the current project phase, active blockers, verified evidence, and operational off-limits.
+- After completing and verifying a task, use the `loop-state-sync` skill (`.agents/skills/loop-state-sync/SKILL.md`) to update `STATE.md` and write a new sequential run log in `docs/Loop-run-log/loop-run-log<N>.md` (counting `1, 2, 3...`; never overwrite existing logs or write `loop-run-log.md` at the repository root).
+- Use `.agents/skills/daily-triage/SKILL.md` for L1 (report-only) repository health and readiness checks, and `.agents/skills/maker-checker/SKILL.md` for independent subagent verification before marking complex changes complete.
+- Default to L1 (report-only) for triage/audit loops unless the user explicitly authorizes code or infrastructure mutations.
