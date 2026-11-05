@@ -2,6 +2,8 @@
 .env
 .env.*
 !.env.example
+!services/aiops-server/.env.example
+/services/aiops-server/.env
 
 # Sensitive or generated backups, never migration source files.
 backups/
@@ -11,9 +13,20 @@ backups/
 *.tar.gz
 *.tgz
 
-# Local execution bookkeeping and private agent memory, not deployment input.
+# Local execution bookkeeping, Loop Engineering state/skills, and private agent memory, not deployment input.
 /.superpowers/sdd/
 /.mnemon/
+/.agents/
+/STATE.md
+/docs/Loop-run-log/
+/loop-run-log*.md
+
+# Local/stray root notes and Word documents; keep tracked docs, runbooks, and service markdown unblocked.
+/*.md
+!README.md
+!AGENTS.md
+!INTRODUCT.md
+*.docx
 
 # Private keys and credential containers must never be published.
 *.pem

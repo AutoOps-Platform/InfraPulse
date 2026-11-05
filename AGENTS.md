@@ -30,3 +30,12 @@ Use the `codebase-memory` skill and the Code Graph MCP tools for structural code
 
 - Do not run `git add`, `git commit`, merge commits, or equivalent staging/commit operations unless the user explicitly authorizes them after reviewing the changes.
 - Keep unrelated working-tree changes intact and report them when relevant.
+
+## Loop Engineering & Session State
+
+- Before starting multi-step work, read `STATE.md` together with this `AGENTS.md` to hydrate current branch state, verified milestones, open gaps, and hard guardrails.
+- Use `.agents/skills/loop-state-sync/SKILL.md` for session hydration (Phase 1) and verified-facts-only `STATE.md` synchronization + append-only sequential run logs at `docs/Loop-run-log/loop-run-log<N>.md` (Phase 2). Always increment `<N>` (`1, 2, 3, ...`), never overwrite existing logs, and never write `loop-run-log.md` at the repository root.
+- Use `.agents/skills/daily-triage/SKILL.md` for strict L1 (report-only) repository health checks, `.gitignore`/secret hygiene audits, and non-destructive configuration verification.
+- Use `.agents/skills/maker-checker/SKILL.md` to run an independent read-only verification (`Loop Checker Auditor` via a `research` subagent) auditing diffs against `AGENTS.md` and `STATE.md` for correctness, zero secret leaks, and scope isolation before marking multi-step tasks complete.
+- Use `.agents/skills/ci-sweeper/SKILL.md` for strict L1 (report-only) local test and readiness sweeps across InfraPulse services (`services/ingestion-gateway`, `services/management-backend`, `services/aiops-server` when present, `agents/telegraf`) without mutating shared Docker volumes or live VMs.
+- See `.agents/LOOP_ENGINEERING.md` for the operational guide, L1 safety boundaries, and `/schedule` vs `/goal` guidance. `STATE.md`, `.agents/`, and `docs/Loop-run-log/` are local gitignored operational artifacts and must never contain secrets or be committed/pushed.
