@@ -1,4 +1,4 @@
-"""Webhook ingestion, Jev evaluation, and direct inference endpoints."""
+"""Webhook ingestion, Jev evaluation, MCP tool invocation, RAG search, and Telegram HITL routes."""
 
 from __future__ import annotations
 
@@ -9,11 +9,14 @@ from fastapi import APIRouter, Header, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from app.agent.prompts import build_system_prompt
+from app.approvals.telegram import ApprovalRecord, TelegramCallbackPayload
 from app.guardrails.sanitizer import GuardrailViolationError, InputSanitizer
 from app.providers.base import InferenceRequest, InferenceResponse, ProviderError
+from app.rag.runbook_rag import RunbookRetrievalResult
 from app.schemas.alert import AlertWebhookPayload
 from app.schemas.decision import JevDecisionRequest, PolicyDecision
 from app.schemas.rca import WebhookProcessingResult
+from app.tools.mcp_tools import MCPToolCallResult, MCPToolDefinition
 
 router = APIRouter(prefix="/api/v1", tags=["aiops"])
 
@@ -26,6 +29,22 @@ class DirectInferencePayload(BaseModel):
     temperature: float = Field(default=0.1, ge=0.0, le=2.0)
     max_tokens: int = Field(default=512, ge=1, le=4096)
     response_json: bool = False
+
+
+class MCPToolInvokePayload(BaseModel):
+    """Request body for invoking a read-only MCP diagnostic tool."""
+
+    tool_name: str
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
+
+class RAGSearchPayload(BaseModel):
+    """Request body for querying the Runbook RAG pipeline."""
+
+    query: str = Field(min_length=1, max_length=1024)
+    os_type: str | None = None
+    service: str | None = None
+    top_k: int = Field(default=2, ge=1, le=5)
 
 
 def _verify_webhook_secret(request: Request, x_aiops_webhook_token: str | None) -> None:
@@ -48,7 +67,7 @@ async def receive_grafana_webhook(
     x_aiops_webhook_token: str | None = Header(default=None),
     x_correlation_id: str | None = Header(default=None),
 ) -> WebhookProcessingResult:
-    """Ingest a Grafana alert webhook and run the full Jev + SaSa AI pipeline."""
+    """Ingest a Grafana alert webhook and run the full Jev + RAG + MCP + SaSa AI + Telegram pipeline."""
     _verify_webhook_secret(request, x_aiops_webhook_token)
     agent = request.app.state.sasa_agent
     try:
@@ -111,5 +130,75 @@ async def direct_agent_infer(
     except ProviderError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+
+
+@router.get("/mcp/tools", response_model=list[MCPToolDefinition])
+async def list_mcp_tools(request: Request) -> list[MCPToolDefinition]:
+    """List all registered read-only MCP diagnostic tools available to SaSa AI."""
+    return request.app.state.sasa_agent.mcp_tools.list_tools()
+
+
+@router.post("/mcp/call", response_model=MCPToolCallResult)
+async def call_mcp_tool(
+    payload: MCPToolInvokePayload,
+    request: Request,
+) -> MCPToolCallResult:
+    """Invoke a read-only MCP tool (`query_prometheus`, `get_server_context`, `search_runbook`, `query_logs`)."""
+    agent = request.app.state.sasa_agent
+    try:
+        return await agent.mcp_tools.invoke_tool(payload.tool_name, payload.arguments)
+    except (GuardrailViolationError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post("/rag/search", response_model=list[RunbookRetrievalResult])
+async def search_rag_runbooks(
+    payload: RAGSearchPayload,
+    request: Request,
+) -> list[RunbookRetrievalResult]:
+    """Directly query the Phase 2.2 Runbook RAG Pipeline."""
+    agent = request.app.state.sasa_agent
+    try:
+        clean_query = InputSanitizer.inspect_text(payload.query, field_name="query")
+        return agent.rag_pipeline.retrieve(
+            clean_query,
+            os_type=payload.os_type,
+            service=payload.service,
+            top_k=payload.top_k,
+        )
+    except GuardrailViolationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post("/integrations/telegram/webhook", response_model=ApprovalRecord)
+async def telegram_approval_callback(
+    payload: TelegramCallbackPayload,
+    request: Request,
+) -> ApprovalRecord:
+    """Process an administrator Approve/Reject button click from Telegram (`5841901091`)."""
+    agent = request.app.state.sasa_agent
+    try:
+        return agent.telegram_service.process_callback(payload)
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         ) from exc

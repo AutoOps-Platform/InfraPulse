@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -63,6 +64,8 @@ class PipelineTraceMetadata(BaseModel):
     deduplicated: bool = False
     cache_hit: bool = False
     jev_backend: str = "heuristic"
+    rag_chunks_retrieved: int = 0
+    mcp_tools_executed: list[str] = Field(default_factory=list)
     llm_provider: str = "none"
     llm_model: str = "none"
     latency_ms: float = 0.0
@@ -83,4 +86,5 @@ class WebhookProcessingResult(BaseModel):
     policy_decision: PolicyDecision | None = None
     rca_report: RCAReport | None = None
     notification_message: str = ""
+    telegram_receipt: dict[str, Any] | None = None
     trace: PipelineTraceMetadata

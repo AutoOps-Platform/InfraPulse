@@ -1,9 +1,10 @@
-"""Step 1–8 Orchestrator: SaSa AI Agent Pipeline.
+"""Step 1–8 Orchestrator: SaSa AI Agent Pipeline (Phase 1 + Phase 2).
 
 Coordinates the traceable execution pipeline:
 Incoming Webhook -> Input Validation -> Guardrails -> Fingerprint Dedup & Cache Lookup
-  -> Jev Decision Model -> Deterministic Policy Gate -> LLM Inference (DeepSeek/Ollama/Gemini)
-  -> Output Validation -> Traceable WebhookProcessingResult
+  -> Jev Decision Model -> Deterministic Policy Gate -> RAG Retrieval & MCP Read-Only Tools
+  -> LLM Inference (DeepSeek/Ollama/Gemini) -> Output Validation
+  -> Telegram HITL Approval / Notification -> Traceable WebhookProcessingResult
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ import time
 import uuid
 
 from app.agent.prompts import build_rca_user_prompt, build_system_prompt
+from app.approvals.telegram import TelegramHITLService
 from app.config import AIOpsSettings
 from app.decision.jev_client import JevDecisionClient
 from app.decision.policy_gate import DeterministicPolicyGate
@@ -21,6 +23,7 @@ from app.guardrails.sanitizer import InputSanitizer
 from app.providers.base import BaseLLMProvider, InferenceRequest, ProviderError
 from app.providers.deepseek import DeepSeekProvider
 from app.providers.gemini import GeminiProvider
+from app.rag.runbook_rag import RunbookRAGPipeline
 from app.schemas.alert import AlertItem, AlertStatus, AlertWebhookPayload
 from app.schemas.decision import (
     ExecutionStrategy,
@@ -33,10 +36,11 @@ from app.schemas.rca import (
     RCAReport,
     WebhookProcessingResult,
 )
+from app.tools.mcp_tools import MCPToolRegistry
 
 
 class SaSaAgent:
-    """Primary AIOps Agent orchestrating Jev decision routing, LLM RCA, and HITL workflows."""
+    """Primary AIOps Agent orchestrating Jev, RAG, MCP Tools, LLM RCA, and Telegram HITL."""
 
     def __init__(
         self,
@@ -47,6 +51,9 @@ class SaSaAgent:
         policy_gate: DeterministicPolicyGate | None = None,
         deduplicator: AlertDeduplicator | None = None,
         response_cache: ResponseCache[RCAReport] | None = None,
+        rag_pipeline: RunbookRAGPipeline | None = None,
+        mcp_tools: MCPToolRegistry | None = None,
+        telegram_service: TelegramHITLService | None = None,
     ) -> None:
         self.settings = settings or AIOpsSettings.from_env()
         self.llm_provider = llm_provider or self._create_default_provider()
@@ -60,6 +67,9 @@ class SaSaAgent:
             ttl_seconds=self.settings.AIOPS_CACHE_TTL_SECONDS,
             max_entries=self.settings.AIOPS_MAX_CACHE_ENTRIES,
         )
+        self.rag_pipeline = rag_pipeline or RunbookRAGPipeline()
+        self.mcp_tools = mcp_tools or MCPToolRegistry(rag_pipeline=self.rag_pipeline)
+        self.telegram_service = telegram_service or TelegramHITLService(self.settings)
 
     def _create_default_provider(self) -> BaseLLMProvider:
         if self.settings.AIOPS_DEFAULT_PROVIDER == "gemini":
@@ -90,6 +100,7 @@ class SaSaAgent:
         policy: PolicyDecision,
         *,
         fallback_note: str | None = None,
+        executed_tools: list[str] | None = None,
     ) -> RCAReport:
         """Construct a deterministic structured RCA report if LLM inference is offline or skipped."""
         evidence = [
@@ -134,7 +145,7 @@ class SaSaAgent:
                 "Minimal impact if read-only diagnostics run first; service restart actions may "
                 "cause brief connection draining."
             ),
-            intended_tools=["query_prometheus", "get_server_context", "search_runbook"],
+            intended_tools=executed_tools or ["query_prometheus", "get_server_context", "search_runbook"],
         )
 
     @staticmethod
@@ -184,7 +195,7 @@ class SaSaAgent:
         # Handle resolved alerts immediately and clear deduplication cooldown
         if payload.status == AlertStatus.RESOLVED or primary.status == AlertStatus.RESOLVED:
             self.deduplicator.clear(fingerprint)
-            jev_Req = JevDecisionRequest(
+            jev_req = JevDecisionRequest(
                 fingerprint=fingerprint,
                 server_id=primary.server_id,
                 alert_name=primary.alert_name,
@@ -193,7 +204,7 @@ class SaSaAgent:
                 labels=primary.labels,
                 annotations=primary.annotations,
             )
-            jev_resp = self.jev_client.evaluate_heuristic(jev_Req)
+            jev_resp = self.jev_client.evaluate_heuristic(jev_req)
             policy = self.policy_gate.enforce(jev_resp, alert_status=AlertStatus.RESOLVED)
             latency_ms = round((time.perf_counter() - started) * 1000.0, 2)
             trace = PipelineTraceMetadata(
@@ -256,6 +267,9 @@ class SaSaAgent:
         cached = self.response_cache.get(fingerprint)
         if cached is not None:
             self.deduplicator.record(fingerprint)
+            tg_receipt = await self.telegram_service.notify_and_request_approval(
+                primary, policy, cached, fingerprint=fingerprint
+            )
             latency_ms = round((time.perf_counter() - started) * 1000.0, 2)
             trace = PipelineTraceMetadata(
                 correlation_id=corr_id,
@@ -275,14 +289,59 @@ class SaSaAgent:
                 policy_decision=policy,
                 rca_report=cached,
                 notification_message=self._format_notification(primary, policy, cached),
+                telegram_receipt=tg_receipt.model_dump(),
                 trace=trace,
             )
 
-        # Stage 6 & 7: Read-Only Context & LLM Inference + Output Schema Validation
+        # Stage 6 (Phase 2): Execute Read-Only MCP Tools & Multi-Stage RAG Runbook Retrieval
+        alert_lower = primary.alert_name.lower()
+        target_metric = (
+            "mem_used_percent"
+            if "mem" in alert_lower
+            else "disk_used_percent"
+            if "disk" in alert_lower or "tmp" in alert_lower
+            else "cpu_usage_active"
+            if "cpu" in alert_lower
+            else "up"
+        )
+        prom_res = await self.mcp_tools.query_prometheus(
+            metric=target_metric,
+            server_id=primary.server_id,
+            window_minutes=15,
+        )
+        ctx_res = await self.mcp_tools.get_server_context(
+            server_id=primary.server_id,
+            labels=primary.labels,
+        )
+        rag_query = " ".join(
+            filter(
+                None,
+                [
+                    primary.alert_name,
+                    primary.annotations.get("summary", ""),
+                    primary.annotations.get("description", ""),
+                ],
+            )
+        )
+        rag_res = await self.mcp_tools.search_runbook(
+            query=rag_query,
+            os_type=primary.labels.get("os"),
+            service=primary.labels.get("service"),
+            top_k=2,
+        )
+        executed_tools = ["query_prometheus", "get_server_context", "search_runbook"]
+        matched_chunks = rag_res.data.get("matched_chunks") or []
+
+        # Stage 7: LLM Inference + Output Schema Validation
         prompt_tokens = 0
         completion_tokens = 0
         system_prompt = build_system_prompt(self.settings.AIOPS_AGENT_NAME)
-        user_prompt = build_rca_user_prompt(primary, policy)
+        user_prompt = build_rca_user_prompt(
+            primary,
+            policy,
+            grounded_runbook_context=rag_res.formatted_context,
+            mcp_tool_summaries=[prom_res.formatted_context, ctx_res.formatted_context],
+        )
 
         try:
             inference_resp = await self.llm_provider.generate(
@@ -318,27 +377,36 @@ class SaSaAgent:
                     str(x)
                     for x in (
                         parsed_json.get("intended_tools")  # type: ignore[union-attr]
-                        or ["query_prometheus", "get_server_context"]
+                        or executed_tools
                     )
                 ],
             )
         except (ProviderError, ValueError, KeyError, TypeError):
-            # Graceful resilience (INTRODUCT.md 16.1): if AI provider is unreachable or returns
-            # non-JSON output, incident handling and notifications continue using structured fallback.
             rca_report = self._build_fallback_rca(
                 primary,
                 policy,
                 fallback_note="Generated via deterministic fallback while LLM provider was unavailable.",
+                executed_tools=executed_tools,
             )
 
         self.deduplicator.record(fingerprint)
         self.response_cache.set(fingerprint, rca_report)
+
+        # Stage 8 (Phase 2.3): Telegram Notification & HITL Approval Dispatch
+        tg_receipt = await self.telegram_service.notify_and_request_approval(
+            primary,
+            policy,
+            rca_report,
+            fingerprint=fingerprint,
+        )
 
         latency_ms = round((time.perf_counter() - started) * 1000.0, 2)
         trace = PipelineTraceMetadata(
             correlation_id=corr_id,
             fingerprint=fingerprint,
             jev_backend=jev_response.backend_mode,
+            rag_chunks_retrieved=len(matched_chunks),
+            mcp_tools_executed=executed_tools,
             llm_provider=rca_report.provider_name,
             llm_model=rca_report.model_name,
             latency_ms=latency_ms,
@@ -353,5 +421,6 @@ class SaSaAgent:
             policy_decision=policy,
             rca_report=rca_report,
             notification_message=self._format_notification(primary, policy, rca_report),
+            telegram_receipt=tg_receipt.model_dump(),
             trace=trace,
         )
