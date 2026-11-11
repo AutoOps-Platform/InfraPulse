@@ -134,12 +134,16 @@ class JevDecisionClient:
         try:
             response = await client.post(self.api_url, headers=headers, json=payload)
         except httpx.HTTPError as exc:
+            if self.settings.JEV_MODE == "auto":
+                return self.evaluate_heuristic(request)
             raise JevDecisionError(f"Jev transport failure against {self.api_url}: {exc}") from exc
         finally:
             if owns_client:
                 await client.aclose()
 
         if response.status_code >= 400:
+            if self.settings.JEV_MODE == "auto":
+                return self.evaluate_heuristic(request)
             raise JevDecisionError(f"Jev API returned HTTP {response.status_code}.")
 
         try:
