@@ -1,40 +1,36 @@
-import { closeSync, constants, fstatSync, openSync, readSync } from 'node:fs';
+import { closeSync, constants, fstatSync, openSync, readFileSync } from 'node:fs';
 import { TextDecoder } from 'node:util';
+import { hasControlChars } from '../app/common/pagination.js';
 
-// Bounded descriptor read prevents path/IO/decoder details from escaping startup.
 export function readSecretFile(path: string): string {
-  let descriptor: number | undefined;
+  let fd: number | undefined;
   try {
-    if (!path || /[\u0000-\u001f]/u.test(path)) throw new Error();
-    descriptor = openSync(path, constants.O_RDONLY);
-    const stat = fstatSync(descriptor);
-    if (!stat.isFile() || stat.size === 0 || stat.size > 65536)
+    if (!path || hasControlChars(path)) throw new Error();
+    fd = openSync(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+    const stat = fstatSync(fd);
+    if (
+      !stat.isFile() ||
+      stat.nlink !== 1 ||
+      stat.size === 0 ||
+      stat.size > 65536 ||
+      (process.platform !== 'win32' &&
+        ((stat.mode & 0o077) !== 0 || stat.uid !== process.geteuid?.()))
+    ) {
       throw new Error();
-    const bytes = Buffer.alloc(65537);
-    let size = 0;
-    while (size < bytes.length) {
-      const count = readSync(
-        descriptor,
-        bytes,
-        size,
-        bytes.length - size,
-        null,
-      );
-      if (count === 0) break;
-      size += count;
     }
-    if (size === 0 || size > 65536) throw new Error();
+    const bytes = readFileSync(fd);
+    if (bytes.length === 0 || bytes.length > 65536) throw new Error();
     return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true })
-      .decode(bytes.subarray(0, size))
+      .decode(bytes)
       .trim();
   } catch {
     throw new Error('Invalid management configuration.');
   } finally {
-    if (descriptor !== undefined) {
+    if (fd !== undefined) {
       try {
-        closeSync(descriptor);
+        closeSync(fd);
       } catch {
-        /* No unsafe IO error propagation. */
+        /* Sanitized descriptor close. */
       }
     }
   }
