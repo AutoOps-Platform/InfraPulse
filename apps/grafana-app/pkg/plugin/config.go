@@ -22,6 +22,7 @@ const PluginID = "infrapulse-infrapulse-app"
 var canonicalUUID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 var configToken = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,128}$`)
 
+// ARCHIVAL source compatibility only; never loaded from environment or exposed.
 type publicSettings struct {
 	AgentControlURL string `json:"agentControlUrl"`
 	GatewayOrigin   string `json:"gatewayOrigin"`
@@ -80,17 +81,9 @@ func loadConfig() (Config, error) {
 			return fail()
 		}
 	}
-	control, err := trustedURL(required("AGENT_CONTROL_URL"), false, false)
-	if err != nil || control.Scheme != "https" {
-		return fail()
-	}
-	gateway, err := trustedURL(required("GATEWAY_ORIGIN"), false, false)
-	if err != nil || gateway.Scheme != "https" {
-		return fail()
-	}
 	c := Config{IdentityConfig: IdentityConfig{GrafanaIssuer: issuer.String(), GrafanaJWKSURL: jwks.String(), GrafanaOrgID: org, GrafanaNamespace: namespace, AllowedAuthMethods: authMethods, AllowLocalHTTP: required("ALLOW_LOOPBACK_GRAFANA_HTTP") == "true"},
 		ManagementURL: management, AssertionIssuer: required("ASSERTION_ISSUER"), AssertionAudience: required("ASSERTION_AUDIENCE"), AssertionKeyID: required("ASSERTION_KEY_ID"), AssertionContext: required("ASSERTION_CONTEXT"),
-		Public: publicSettings{AgentControlURL: control.String(), GatewayOrigin: gateway.String()}, ManagementCAFile: required("MANAGEMENT_CA_FILE"), GrafanaCAFile: required("GRAFANA_CA_FILE")}
+		ManagementCAFile: required("MANAGEMENT_CA_FILE"), GrafanaCAFile: required("GRAFANA_CA_FILE")}
 	for _, value := range []string{c.AssertionIssuer, c.AssertionAudience} {
 		if !configToken.MatchString(value) {
 			return fail()
