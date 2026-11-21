@@ -1,0 +1,304 @@
+{
+  "platforms": {
+    "linux": {
+      "cloudWatch": {
+        "files": {
+          "agent": "c9b97bf601b66603d1c056c7d8f6e6ea4e3f07ca169ba3708bf2cf622af7dedf",
+          "control": "15e7528fbb8dea498b4241163e58b035682f013ce1463380485376fe9dd1e3c7",
+          "downloader": "37f8c8a03aeb39f7aef6a9682be6bee51e5b64b339ee429fcb0661026add742b"
+        },
+        "packageVersion": "1.300074.1b2005",
+        "signer": null,
+        "version": "1.300074.1b2005"
+      },
+      "configuration": {
+        "plugins": [
+          {
+            "measurements": [
+              {
+                "input": "usage_active",
+                "metricKeys": [
+                  "cpu_busy"
+                ]
+              }
+            ],
+            "plugin": "cpu",
+            "resources": [
+              {
+                "dimensions": [
+                  {
+                    "name": "cpu",
+                    "value": "cpu-total"
+                  }
+                ],
+                "id": "cpu_total",
+                "kind": "cpu",
+                "selector": "cpu-total"
+              }
+            ]
+          },
+          {
+            "measurements": [
+              {
+                "input": "used_percent",
+                "metricKeys": [
+                  "memory_used"
+                ]
+              }
+            ],
+            "plugin": "mem",
+            "resources": []
+          },
+          {
+            "measurements": [
+              {
+                "input": "used_percent",
+                "metricKeys": [
+                  "disk_used"
+                ]
+              }
+            ],
+            "plugin": "disk",
+            "resources": [
+              {
+                "dimensions": [
+                  {
+                    "name": "device",
+                    "value": "sda1"
+                  },
+                  {
+                    "name": "fstype",
+                    "value": "ext4"
+                  },
+                  {
+                    "name": "path",
+                    "value": "/"
+                  }
+                ],
+                "id": "root_disk",
+                "kind": "filesystem",
+                "selector": "/"
+              }
+            ]
+          },
+          {
+            "measurements": [
+              {
+                "input": "bytes_sent",
+                "metricKeys": [
+                  "network_sent"
+                ]
+              },
+              {
+                "input": "bytes_recv",
+                "metricKeys": [
+                  "network_received"
+                ]
+              }
+            ],
+            "plugin": "net",
+            "resources": [
+              {
+                "dimensions": [
+                  {
+                    "name": "interface",
+                    "value": "eth0"
+                  }
+                ],
+                "id": "eth0",
+                "kind": "interface",
+                "selector": "eth0"
+              }
+            ]
+          }
+        ]
+      },
+      "helper": {
+        "sha256": "5bb23142d7c3cf03c1270ac019f37229a218135d5fbd24c9ce62cb9d3268e66f",
+        "signer": null,
+        "url": "https://amazon-ssm-ap-southeast-1.s3.ap-southeast-1.amazonaws.com/latest/debian_amd64/ssm-setup-cli",
+        "version": "sha256:5bb23142d7c3cf03c1270ac019f37229a218135d5fbd24c9ce62cb9d3268e66f"
+      },
+      "metrics": [
+        {
+          "aggregation": [
+            "Average"
+          ],
+          "dimensions": [
+            {
+              "name": "EnrollmentId",
+              "value": "${EnrollmentId}"
+            },
+            {
+              "name": "ManagedNodeId",
+              "value": "${ManagedNodeId}"
+            },
+            {
+              "name": "ServerId",
+              "value": "${ServerId}"
+            },
+            {
+              "name": "cpu",
+              "value": "${native.cpu_total.cpu}"
+            }
+          ],
+          "group": "cpu",
+          "key": "cpu_busy",
+          "metricName": "cpu_usage_active",
+          "namespace": "InfraPulse/Lab",
+          "periodSeconds": 60,
+          "resourceId": "cpu_total",
+          "semantics": "gauge",
+          "statistic": "Average",
+          "unit": "Percent"
+        },
+        {
+          "aggregation": [
+            "Average"
+          ],
+          "dimensions": [
+            {
+              "name": "EnrollmentId",
+              "value": "${EnrollmentId}"
+            },
+            {
+              "name": "ManagedNodeId",
+              "value": "${ManagedNodeId}"
+            },
+            {
+              "name": "ServerId",
+              "value": "${ServerId}"
+            }
+          ],
+          "group": "memory",
+          "key": "memory_used",
+          "metricName": "mem_used_percent",
+          "namespace": "InfraPulse/Lab",
+          "periodSeconds": 60,
+          "resourceId": null,
+          "semantics": "gauge",
+          "statistic": "Average",
+          "unit": "Percent"
+        },
+        {
+          "aggregation": [
+            "Average"
+          ],
+          "dimensions": [
+            {
+              "name": "EnrollmentId",
+              "value": "${EnrollmentId}"
+            },
+            {
+              "name": "ManagedNodeId",
+              "value": "${ManagedNodeId}"
+            },
+            {
+              "name": "ServerId",
+              "value": "${ServerId}"
+            },
+            {
+              "name": "device",
+              "value": "${native.root_disk.device}"
+            },
+            {
+              "name": "fstype",
+              "value": "${native.root_disk.fstype}"
+            },
+            {
+              "name": "path",
+              "value": "${native.root_disk.path}"
+            }
+          ],
+          "group": "disk",
+          "key": "disk_used",
+          "metricName": "disk_used_percent",
+          "namespace": "InfraPulse/Lab",
+          "periodSeconds": 60,
+          "resourceId": "root_disk",
+          "semantics": "gauge",
+          "statistic": "Average",
+          "unit": "Percent"
+        },
+        {
+          "aggregation": [
+            "Average"
+          ],
+          "dimensions": [
+            {
+              "name": "EnrollmentId",
+              "value": "${EnrollmentId}"
+            },
+            {
+              "name": "ManagedNodeId",
+              "value": "${ManagedNodeId}"
+            },
+            {
+              "name": "ServerId",
+              "value": "${ServerId}"
+            },
+            {
+              "name": "interface",
+              "value": "${native.eth0.interface}"
+            }
+          ],
+          "group": "network",
+          "key": "network_sent",
+          "metricName": "net_bytes_sent",
+          "namespace": "InfraPulse/Lab",
+          "periodSeconds": 60,
+          "resourceId": "eth0",
+          "semantics": "rate",
+          "statistic": "Average",
+          "unit": "Bytes/Second"
+        },
+        {
+          "aggregation": [
+            "Average"
+          ],
+          "dimensions": [
+            {
+              "name": "EnrollmentId",
+              "value": "${EnrollmentId}"
+            },
+            {
+              "name": "ManagedNodeId",
+              "value": "${ManagedNodeId}"
+            },
+            {
+              "name": "ServerId",
+              "value": "${ServerId}"
+            },
+            {
+              "name": "interface",
+              "value": "${native.eth0.interface}"
+            }
+          ],
+          "group": "network",
+          "key": "network_received",
+          "metricName": "net_bytes_recv",
+          "namespace": "InfraPulse/Lab",
+          "periodSeconds": 60,
+          "resourceId": "eth0",
+          "semantics": "rate",
+          "statistic": "Average",
+          "unit": "Bytes/Second"
+        }
+      ],
+      "parameter": {
+        "name": "/infrapulse/lab-20261118/presets/linux",
+        "sha256": "e5a6c2b0a153dce3f03915f3634c8343ebf1284ab9ae94239b5126bd220a5529",
+        "tier": "Standard",
+        "version": 2
+      },
+      "revision": "5a6a423c1ab0c39677cd1977f3515979fd49da2cc31831eb03cf795310b10ae6",
+      "ssm": {
+        "sha256": "7894f86a1d19dda791394ebc651daaa51d3d2c36a9d53a20f98adaf1b386d92f",
+        "signer": null,
+        "url": "https://amazon-ssm-ap-southeast-1.s3.ap-southeast-1.amazonaws.com/3.3.5828.0/debian_amd64/amazon-ssm-agent.deb",
+        "version": "3.3.5828.0"
+      }
+    }
+  },
+  "schemaVersion": 1
+}
