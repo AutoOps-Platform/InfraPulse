@@ -1,4 +1,34 @@
-# Bước 6 — InfraPulse Grafana App Plugin
+# InfraPulse Grafana App — current AWS source (UNVERIFIED)
+
+> **Source retirement — 2026-11-20:** legacy Gateway/Telegraf, old Compose/Prometheus provisioning and unmounted management editors are deleted from current source. Historical instructions below are records only, not runnable installation paths. Existing live lab/data/secrets are unchanged. Use the [current AWS architecture](<../architecture/aws-ssm-cloudwatch.md>).
+
+
+The [ECS deployment](<aws-lab.md>) uses the image-owned plugin and provisioning YAML, not the old dist-mount overlay. The current Grafana image does not contain dashboard JSON; roll it out together with the populated, verified read-only S3 Files mount. Grafana keeps SQLite on its protected EBS-backed volume; Management alone connects to external PostgreSQL. See the [protected-file matrix](<management-backend.md>) and [current API](<../contracts/grafana-management-api.md>). These instructions do not establish live deployment, mount or identity acceptance.
+
+## Current app and identity boundary
+
+The app exposes one **VMs** menu: inventory, VM detail, onboarding status and one-time bootstrap download, with explicit recovery and archive controls. The old Servers and Install links open the same VM when given a valid UUID; Overview and Monitoring lead to the native dashboards (or to VMs if the requested VM has no usable binding). Go still forwards only exact `/me`, inventory CRUD and onboarding/bootstrap/retry/decommission routes. The separate frontend-only inventory datasource uses the same authorized read API and gets no secrets or host environment. Neither component revives legacy Agent/credential/profile routes.
+
+Nest remains business/RBAC authority: actual Viewer→Viewer, Editor→read-only Operator, organization Admin→Admin. Every resource call verifies the actual enrolled Grafana `X-Grafana-Id` ES256/P-256 ID token and current PluginContext. Require exact issuer, fixed trusted JWKS, org/namespace, immutable `user:<database-id>` subject, role, plugin/instance context and reviewed auth methods. No username/email, browser role header, service account, anonymous/render, default org assumption or Admin fallback. Signed omitted `authenticatedBy` is only accepted by explicit `absent` policy, not assumed password authentication.
+
+Grafana 13.3.x ID identity is experimental upstream: `INFRAPULSE_IDENTITY_MODE=grafana13-id-token` and deliberate `INFRAPULSE_ACCEPT_EXPERIMENTAL_IDENTITY=true` are required after review. The [identity reference](<../../apps/grafana-app/.env.example>) has no secrets; actual enrollment supplies issuer/JWKS/org/namespace/auth methods and matching assertion context. No target instance identity is invented.
+
+JWKS remains fixed-origin/bounded/cache-expiring, no token-selected URL, redirects/ambient proxy or TLS verification bypass. Go separately signs fresh 30s Ed25519 method/exact raw target/raw body assertions with durable backend nonce checking. Separate Grafana/Management TLS CA files remain valid; removing the legacy Agent TLS listener/origins does **not** weaken identity or internal transport trust.
+
+Grafana mounts its selective Ed25519 private assertion key plus upstream first-start admin user/password files; Nest gets public assertion trust, not those secrets. The admin files initialize a new SQLite database only: changing them must not be treated as resetting an existing admin account or volume. Exact plugin-ID environment forwarding trusts the backend with the container environment, not just INFRAPULSE variables: no unrelated credentials or wildcard. Exact-ID unsigned loading remains a reviewed lab exception, not production signing assurance. Identity rotation is a separately reviewed public-trust/private-holder rollout, not regeneration on every deploy.
+
+## Current AWS user flow
+
+1. Admin adds an inventory Server with the real OS. Selecting Linux/Windows does not prove native OS qualification.
+2. Explicit **Download bootstrap** submits signed JSON `{requestId}` and receives a bounded no-store attachment once. Activation material is secret/transient; never log, persist to browser storage, auto-open or auto-replay it. Lost response: inspect safe onboarding status, then explicitly choose eligible retry intent, never silently download again.
+3. Progress separates onboarding state/stage, binding cleanup, monitoring and alert sync. Retry modes are `retry-config` or `regenerate-unused`; decommission is asynchronous and may remain CleanupRequired/capacity-reserved.
+4. **Tổng quan VM** shows inventory, including machines without metrics. **Chi tiết VM** sends exact CloudWatch queries for the currently verified Linux binding. Empty or errored queries are not zero or proof the VM is offline. Metrics Success and operator-owned alert Synced are independent. On ECS, the current image reads [dashboard JSON from the read-only S3 Files mount](<aws-lab.md#dashboard-storage-on-ecs-optional>); the React/Go app and inventory datasource remain in the image.
+
+Default AWS SDK/EC2 credentials are server-side only. Host-loopback Grafana is reached via a separately authorized SSM tunnel (`http://localhost:3000`); private Management has no host binding. Shared IMDS role is not per-container IAM isolation. Official artifact versions, canonical metrics/qualification, published SSM pins, actual seed UUIDs, images and enrollment remain real-input gates, not fixture/OS-support/deployment evidence.
+
+## HISTORICAL — Step 6 Telegraf/Gateway implementation (not current commands)
+
+The full previous document below is preserved, including HTTP/CA work, legacy UI/key/provisioning, old build/Compose blocks and vm-1 results. It neither describes the current AWS flow nor authorizes builds, tests or operations. Identity rationale remains useful historical reference; current authority is the source/API boundary above.
 
 ## 1. Phạm vi và hợp đồng
 
@@ -53,10 +83,10 @@ Template không chứa secret: [plugin .env.example](<../../apps/grafana-app/.en
 | `...GRAFANA_AUTH_METHODS` | CSV không khoảng trắng, review theo auth modules thực tế |
 | `...ASSERTION_ISSUER/AUDIENCE/KEY_ID` | Khớp Nest admin trust, khác service trust |
 | `...ASSERTION_KEY_FILE` | Absolute HOST path trong Compose, container path cố định `/run/infrapulse-grafana-assertion.pem` |
-| `...AGENT_CONTROL_URL` | HTTPS Management origin thực sự Agent truy cập, không `/api/v1` suffix |
-| `AGENT_GATEWAY_ORIGIN` | HTTPS origin khớp đúng provisioning/installer pin |
+| `...AGENT_CONTROL_URL` | HTTP(S) Management origin thực sự Agent truy cập; HTTP chỉ mạng private/VPN, không `/api/v1` suffix |
+| `AGENT_GATEWAY_ORIGIN` | HTTP(S) origin khớp đúng provisioning/installer pin; HTTP qua IP private |
 
-Không có default instance identity. Không sửa root URL của Grafana đang dùng mà không migration URL/cookie/reverse-proxy có chủ đích. Private CA: runtime ngoài Compose có `INFRAPULSE_GRAFANA_CA_FILE` / `...MANAGEMENT_CA_FILE`; nếu dùng với overlay, tự thêm read-only mount và env file path tương ứng. Leaf cert/SAN/chain phải phù hợp URL, không giải quyết bằng bỏ TLS verification.
+Không có default instance identity. Không sửa root URL của Grafana đang dùng mà không migration URL/cookie/reverse-proxy có chủ đích. CA của adapter/identity Grafana vẫn là cơ chế riêng, không phải Agent installer CA. Private CA: runtime ngoài Compose có `INFRAPULSE_GRAFANA_CA_FILE` / `...MANAGEMENT_CA_FILE`; nếu dùng với overlay, tự thêm read-only mount và env file path tương ứng. Leaf cert/SAN/chain phải phù hợp URL, không giải quyết bằng bỏ TLS verification.
 
 ## 5. Build và Compose
 
@@ -71,12 +101,11 @@ pnpm build:backend
 
 Go>=1.26.5 (đã dùng1.27.1), Node24.x, pnpm11.24.0. Khi chuyển artifact từ Windows sang Linux, kiểm tra owner/read permissions và đặt executable mode0755 cho Go binary trước read-only mount; không suy ra NTFS ACL tương đương POSIX permissions. Các artifacts có frontend AMD entry, assets/plugin metadata, executable `gpx_infrapulse_linux_amd64`. Optional [Dockerfile artifact target](<../../apps/grafana-app/Dockerfile>) build Linux không khởi chạy app. Chạy `pnpm dev` để watch frontend; không tự chạy Grafana thứ hai thay stack hiện có.
 
-Merge **giá trị đã review** từ template plugin vào root private `.env`; không đưa credential vào shell history. Base stack DB/bootstrap/migrate/seed vẫn theo quy trình cũ. Overlay dùng provisioning root riêng `/etc/infrapulse-provisioning` với bốn directory mounts read-only (app và ba families hiện có), tránh nested missing mountpoint dưới bind read-only của base. Sau khi build, overlay opt-in [compose.grafana-app.yaml](<../../deploy/compose/compose.grafana-app.yaml>) mount dist và provisioning app vào Grafana hiện có. Khi Agent TLS đã cấu hình:
+Merge **giá trị đã review** từ template plugin vào root private `.env`; không đưa credential vào shell history. Base stack DB/bootstrap/migrate/seed vẫn theo quy trình cũ. Overlay dùng provisioning root riêng `/etc/infrapulse-provisioning` với bốn directory mounts read-only (app và ba families hiện có), tránh nested missing mountpoint dưới bind read-only của base. Sau khi build, overlay opt-in compose.grafana-app.yaml (`../../deploy/compose/compose.grafana-app.yaml`, retired source) mount dist và provisioning app vào Grafana hiện có. Với HTTP private đã cấu hình theo [hướng dẫn Agent](<telegraf-agent.md#3-http-central-trên-mạng-private>), dùng base + Grafana overlay, không cần TLS overlay:
 
 ```sh
 docker compose --env-file .env \
   -f deploy/compose/compose.yaml \
-  -f deploy/compose/compose.agent-tls.yaml \
   -f deploy/compose/compose.grafana-app.yaml \
   up -d grafana
 ```
@@ -89,7 +118,7 @@ Development same-container channel: nếu Grafana root thật là `http://localh
 
 Mở `/a/infrapulse-infrapulse-app/overview` dưới Grafana subpath nếu có. Overview scan có giới hạn, có thể partial; không là aggregate transactional endpoint. Telemetry Unknown giữ nguyên reason/as-of/source health, không đổi thành Offline. `/me` trả lời chỉ chứng minh Management user API, không mọi dependency healthy.
 
-Onboarding: **Add Server → chọn OS thật của Server → Register Agent → chọn/pin published profile version đúng OS → Issue API Key → provisioning preview → đọc/install instructions → View Monitoring**. GET provisioning tạo receipt ở Nest, không chứng minh applied/installed/Online. Installer có sẵn tự provision/render/report sau; không copy nghiệp vụ đó vào plugin. Không có artifact distribution API: operator chuyển bundle installer đã review và official Telegraf binary + independent checksum. Commands hướng dẫn có placeholder local path/hash/CA rõ ràng; key nhập qua hidden prompt, không command line. Không cung cấp `curl|bash`, ExecutionPolicy bypass hoặc TLS insecure option.
+Onboarding: **Add Server → chọn OS thật của Server → Register Agent → chọn/pin published profile version đúng OS → Issue API Key → provisioning preview → đọc/install instructions → View Monitoring**. GET provisioning tạo receipt ở Nest, không chứng minh applied/installed/Online. Installer có sẵn tự provision/render/report sau; không copy nghiệp vụ đó vào plugin. Không có artifact distribution API: operator chuyển bundle installer đã review và official Telegraf binary + independent checksum. Commands hướng dẫn có placeholder local path/hash rõ ràng, không CA options; HTTP có cảnh báo key/metrics plaintext; key nhập qua hidden prompt, không command line. Không cung cấp `curl|bash`, ExecutionPolicy bypass hoặc TLS insecure option.
 
 Key chỉ xuất hiện một lần trong modal đang mở; Copy cần user action và clipboard có thể còn secret sau khi modal đóng. Đóng/đổi trang/refresh không lấy lại được. Không ghi localStorage/sessionStorage, URL, log, notifications hoặc metrics analytics. Nếu request issue/rotate timeout/lost response: giữ operation UUID ở bộ nhớ để đối chiếu metadata, không auto-retry/new UUID. `secret_already_issued` chỉ trả safe metadata; inspect/revoke key không còn truy cập được rồi **chủ động** tạo operation mới. Reload làm mất UUID tạm thời: dùng metadata Agent để tìm issuance cần xử lý. Rotation successor trả secret một lần, old key cắt tối đa300s; cần cập nhật installer kịp thời. Revoke/disable/retire/archive có xác nhận; Gateway positive cache<=30s/in-flight requests không bị hủy tức thời.
 

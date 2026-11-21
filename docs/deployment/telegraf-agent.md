@@ -1,4 +1,9 @@
-# Bước 4 — Telegraf Agent & Installer
+# HISTORICAL — Bước 4 Telegraf Agent & Installer
+
+> **Source retirement — 2026-11-20:** legacy Gateway/Telegraf, old Compose/Prometheus provisioning and unmounted management editors are deleted from current source. Historical instructions below are records only, not runnable installation paths. Existing live lab/data/secrets are unchanged. Use the [current AWS architecture](<../architecture/aws-ssm-cloudwatch.md>).
+
+
+> Archive only: all instructions, API-key flows, HTTP/CA changes and lab results below belong to the retired Telegraf/Gateway product. They are **not current AWS installation commands or proof of AWS/native support**. Historical documents remain; the first-party installer source is deleted and is not provisioned by current AWS images. The replacement is [hybrid SSM + CloudWatch](<../architecture/aws-ssm-cloudwatch.md>); use the [AWS runbook](<aws-lab.md>) and [current app flow](<grafana-app.md>). No old lab, service, certificate or volume is changed by this cleanup.
 
 **Trạng thái:** đã triển khai source. Sau giai đoạn source-only, người dùng cho phép lab Linux riêng trên vm-1 ngày 2026-11-02: cài mới, update-config, TLS/auth cơ bản và Agent → Gateway → Prometheus đã có bằng chứng thực tế; xem [biên bản lab](<../testing/telegraf-agent-vm1-20261102.md>). Windows và checklist nghiệm thu đầy đủ vẫn chưa hoàn tất; không suy rộng kết quả lab thành production qualification.
 
@@ -12,10 +17,10 @@ Mỗi Server có bộ ID/key riêng. Không copy thư mục Agent đã cài sang
 
 ### Bố cục source
 
-- [Linux installer](<../../agents/telegraf/linux/install.sh>), [uninstaller](<../../agents/telegraf/linux/uninstall.sh>), [lifecycle](<../../agents/telegraf/linux/lifecycle.py>), [systemd unit](<../../agents/telegraf/linux/infrapulse-telegraf.service>).
-- [Windows installer](<../../agents/telegraf/windows/install.ps1>), [uninstaller](<../../agents/telegraf/windows/uninstall.ps1>), [lifecycle module](<../../agents/telegraf/windows/AgentLifecycle.psm1>).
-- [Provisioning/renderer/report](<../../agents/telegraf/common/agentctl.py>), [agent template](<../../agents/telegraf/templates/agent.toml.tpl>), [HTTP output template](<../../agents/telegraf/templates/output-http.toml.tpl>).
-- Profile mirrors: [linux-base](<../../agents/telegraf/profiles/linux-base.json>), [windows-base](<../../agents/telegraf/profiles/windows-base.json>). Các file này chỉ mô tả seed hiện có, không được installer nạp để ghi đè profile từ Management.
+- Linux installer (`../../agents/telegraf/linux/install.sh`, retired source), uninstaller (`../../agents/telegraf/linux/uninstall.sh`, retired source), lifecycle (`../../agents/telegraf/linux/lifecycle.py`, retired source), systemd unit (`../../agents/telegraf/linux/infrapulse-telegraf.service`, retired source).
+- Windows installer (`../../agents/telegraf/windows/install.ps1`, retired source), uninstaller (`../../agents/telegraf/windows/uninstall.ps1`, retired source), lifecycle module (`../../agents/telegraf/windows/AgentLifecycle.psm1`, retired source).
+- Provisioning/renderer/report (`../../agents/telegraf/common/agentctl.py`, retired source), agent template (`../../agents/telegraf/templates/agent.toml.tpl`, retired source), HTTP output template (`../../agents/telegraf/templates/output-http.toml.tpl`, retired source).
+- Profile mirrors: linux-base (`../../agents/telegraf/profiles/linux-base.json`, retired source), windows-base (`../../agents/telegraf/profiles/windows-base.json`, retired source). Các file này chỉ mô tả seed hiện có, không được installer nạp để ghi đè profile từ Management.
 - [Checklist nghiệm thu](<../testing/telegraf-agent-checklist.md>), [quyết định kỹ thuật](<../architecture/telegraf-agent-implementation.md>).
 
 ## 2. Chuẩn bị Management và credential
@@ -26,51 +31,46 @@ Theo [hợp đồng provisioning](<../contracts/agent-provisioning.md>) và [hư
 2. `POST /api/v1/servers/{server_id}/agents` để lấy Agent đã gắn Server.
 3. Chọn profile `linux-base`/`windows-base` đã seed/publish; `PUT /api/v1/servers/{server_id}/profile` với `profile_version_id` cụ thể đã published, đúng OS. Installer không tự chọn bản latest.
 4. `POST /api/v1/agents/{agent_id}/credentials` với `issuance_request_id` UUID mới và đủ scopes `metrics:write`, `provisioning:read`, `config:report`. Lưu API Key chỉ trả **một lần** vào file private hoặc password manager. Retry issuance cùng UUID có thể trả 409, không phục hồi plaintext. Không ghi key vào terminal history, ticket, logs hoặc script.
-5. Chuẩn bị HTTPS control origin và HTTPS Gateway origin, certificate SAN đúng hostname/IP thực tế, CA chain đúng. Đồng bộ thời gian/NTP trên Agent và central.
+5. Chuẩn bị control origin và Gateway origin thực sự Agent truy cập được. HTTP chỉ dùng trên mạng private/VPN được kiểm soát: API key và telemetry truyền plaintext. HTTPS tùy chọn dùng trust store hệ thống, không có tham số CA riêng trong bộ cài. Đồng bộ thời gian/NTP trên Agent và central.
 
 Installer gọi `GET /api/v1/agent/provisioning` Bearer. Kiểm tra response schema, OS, UUIDs, immutable version, SHA-256 canonical config, headers/protocol và Gateway origin phải trùng origin operator chỉ định. ID không lấy từ hostname hoặc nhập tùy ý. Khi cập nhật/cài lại, ID Agent/Server và Management origin phải khớp trạng thái cũ; muốn chuyển sang Agent khác phải uninstall có chủ đích rồi cài mới. Không tự tạo credential hoặc gọi DB/Gateway internal verification.
 
 `POST /api/v1/agent/config-reports` gửi `applied` sau activation; Linux còn parse offline ba TOML và quan sát service active/running, PID/InvocationID/NRestarts ổn định hai giây trong budget ba giây. Windows hiện dựa service-manager acceptance và chưa có native runtime qualification. Gửi `failed` cho activation thất bại khi có receipt hợp lệ. Lỗi trước provisioning thành công không thể gửi receipt tùy ý. Các gate local này **không chứng minh semantic/plugin readiness, delivery hoặc Online**; report không phải heartbeat. Gateway chỉ công nhận metrics sau upstream acceptance. Agent version trong report là phiên bản installer/renderer, không phải binary Telegraf được chứng thực. Xem [regression và E2E Linux bổ sung](<../testing/grafana-app-vm1-20261103.md>); recovery lab vẫn còn mở.
 
-## 3. TLS central thực tế
+## 3. HTTP central trên mạng private
 
-[Compose gốc](<../../deploy/compose/compose.yaml>) vẫn là HTTP loopback của Bước 2/3. Installer **từ chối HTTP**, kể cả lab. Không đổi sang `insecure_skip_verify` để vượt lỗi.
+Từ thay đổi 2026-11-18, bộ cài chấp nhận HTTP và không nhận/copy/render CA riêng. API key, scopes, checksum và identity/origin pin vẫn được kiểm tra; chúng **không mã hóa** HTTP và không chống được kẻ tấn công trên đường truyền. Chỉ dùng trên mạng private tin cậy/VPN với firewall giới hạn máy Agent. Không mở các cổng này ra Internet.
 
-Có hai lựa chọn triển khai: dùng HTTPS endpoint đã được operator triển khai đúng, hoặc sử dụng [Compose TLS override](<../../deploy/compose/compose.agent-tls.yaml>) mới. Override dùng **Node HTTPS trực tiếp** cho hai Agent API và **Uvicorn TLS trực tiếp** cho Gateway, không thêm Nginx. Management HTTP nội bộ vẫn giữ nguyên cho Gateway signed RPC và health; TLS listener không mở Admin/internal/OpenAPI. Base Compose không bị sửa.
-
-Override yêu cầu Docker Compose **2.24.4+** vì `!override`. Cấu hình các biến trong [env mẫu](<../../.env.example>):
+Compose gốc (`../../deploy/compose/compose.yaml`, retired source) vẫn mặc định bind loopback. Để chuẩn bị lab nhiều máy, đặt **IP private thật của central**, ví dụ dưới đây chỉ là minh họa:
 
 ```dotenv
-# Địa chỉ bind của host central, mặc định loopback. Thay bằng địa chỉ interface
-# dự kiến và kiểm soát firewall; không dùng loopback nếu VM cần truy cập.
-AGENT_CONTROL_BIND=127.0.0.1
-AGENT_CONTROL_PORT=3443
-AGENT_CONTROL_TLS_CERT_FILE=/secure/certs/control-fullchain.pem
-AGENT_CONTROL_TLS_KEY_FILE=/secure/certs/control-key.pem
-AGENT_GATEWAY_BIND=127.0.0.1
-AGENT_GATEWAY_PORT=8443
-AGENT_GATEWAY_ORIGIN=https://metrics.example.internal:8443
-AGENT_GATEWAY_TLS_CERT_FILE=/secure/certs/metrics-fullchain.pem
-AGENT_GATEWAY_TLS_KEY_FILE=/secure/certs/metrics-key.pem
-AGENT_GATEWAY_TLS_CA_FILE=/secure/certs/root-ca.pem
-INGEST_TLS_SERVER_NAME=metrics.example.internal
-# Bước7: file mới đã render verified TLS scrape, không copy đè config đang dùng:
-PROMETHEUS_TLS_SCRAPE_CONFIG_FILE=/secure/config/prometheus-tls.yml
+AGENT_CONTROL_BIND=172.16.0.4
+MANAGEMENT_HOST_PORT=3001
+AGENT_GATEWAY_BIND=172.16.0.4
+INGEST_HOST_PORT=8000
+MANAGEMENT_AGENT_INGEST_BASE_URL=http://172.16.0.4:8000
+AGENT_GATEWAY_ORIGIN=http://172.16.0.4:8000
+INFRAPULSE_AGENT_CONTROL_URL=http://172.16.0.4:3001
 ```
 
-TLS overlay cũng chuyển Prometheus self-monitoring sang HTTPS. Trước khi dùng overlay, chạy [renderer](<../../deploy/scripts/render-prometheus-tls.py>) với cùng DNS SAN, ví dụ `python3 deploy/scripts/render-prometheus-tls.py --server-name metrics.example.internal --output /secure/config/prometheus-tls.yml` ở thư mục operator kiểm soát, file đích chưa tồn tại. [Runbook Bước7](<central-vm2-step7.md#4-tls-gateway-và-prometheus-self-monitoring>) giải thích mount public CA và migration biến bắt buộc mới; không bỏ xác minh TLS để chữa scrape error.
+`MANAGEMENT_AGENT_INGEST_BASE_URL` và `AGENT_GATEWAY_ORIGIN` phải khớp chính xác. Backend chỉ cho HTTP loopback hoặc IP private literal (RFC1918/IPv6 ULA), không public IP/FQDN. IP bind phải có trên host; origin phải truy cập được từ Agent, không dùng Docker hostname hay loopback cho Agent ở máy khác. `MANAGEMENT_HOST_PORT`/`INGEST_HOST_PORT` là cổng HTTP; `AGENT_CONTROL_PORT`/`AGENT_GATEWAY_PORT` chỉ dành cho TLS overlay.
 
-Các hostname/path trên chỉ là ví dụ phải thay; không có secret hoặc certificate tự sinh. `AGENT_GATEWAY_ORIGIN` override giá trị provisioning `MANAGEMENT_AGENT_INGEST_BASE_URL`; phải đúng origin mà các máy Agent nhìn thấy, không phải tên container. `INGEST_TLS_SERVER_NAME` là DNS SAN trong Gateway cert và là alias mạng Docker cho health-check có xác minh TLS; không chứa scheme/port/path. CA health-check dùng để xác minh cert Gateway, không phải private key. PEM cert/fullchain cần include intermediate; private key không mã hóa passphrase vì service không tương tác. Quyền đọc chỉ cấp đúng runtime UID 10002 Management / 10001 Gateway và operator, không chmod world-readable private key.
+**Lưu ý exposure:** bind HTTP Management ra LAN mở toàn bộ API có xác thực (Admin/internal/health), không chỉ hai Agent routes như listener TLS chuyên dụng. Giới hạn firewall/network trước rollout; bộ cài không tự làm việc này. PostgreSQL/Prometheus/Grafana vẫn giữ network/bind mặc định.
 
-Lệnh triển khai **chỉ chạy sau này** từ repository root, sau bootstrap/migrate/seed central theo Bước 3:
+Sau khi operator bootstrap/migrate/seed, build plugin và review đầy đủ các biến Grafana, dùng base Compose cùng Grafana overlay, **không kèm TLS overlay** cho HTTP. Lệnh dưới đây dành cho operator chạy sau từ repository root, **chưa được thực thi trong phiên sửa source này**:
 
-```powershell
-docker compose --env-file .env -f deploy/compose/compose.yaml -f deploy/compose/compose.agent-tls.yaml up -d --build prometheus management ingest
+```sh
+docker compose --env-file .env \
+  -f deploy/compose/compose.yaml \
+  -f deploy/compose/compose.grafana-app.yaml \
+  up -d --build prometheus management ingest grafana
 ```
 
-Không chạy lệnh này trong phiên implementation. TLS listener control mặc định 3443; native deployment ngoài Compose dùng `MANAGEMENT_AGENT_TLS_CERT_FILE`, `MANAGEMENT_AGENT_TLS_KEY_FILE`, `MANAGEMENT_AGENT_TLS_PORT`, `MANAGEMENT_AGENT_TLS_BIND` (mặc định bind `127.0.0.1`). Không có biến TLS nào thì không mở listener mới; cấu hình TLS thiếu/sai làm startup fail, không tự fallback HTTP cho Agent. Đổi cert phải restart runtime.
+Phải bao gồm `ingest`: chỉ `up -d grafana` không khởi tạo/cập nhật Gateway khi cài mới hoặc đổi HTTP bind. Nếu đã có deployment TLS, cần kế hoạch migration riêng cho container/config và Agent identity; không chạy lệnh này lên stack cũ một cách mù quáng. Hướng dẫn enrollment/build Grafana: [runbook](<grafana-app.md>).
 
-Provisioning/report không theo redirect và không dùng proxy từ environment. Upstream Telegraf `outputs.http` dùng Go HTTP client theo redirect chuẩn, **không có knob chặn redirect** trong phiên bản tham khảo. Vì vậy endpoint metrics phải là URL cuối cùng, operator không được cấu hình redirect (đặc biệt sang HTTP/subdomain) và cần kiểm soát DNS/PKI/egress của dịch vụ này. Installer kiểm tra pin ban đầu, không phải firewall hoặc certificate pinning. Không tuyên bố đã loại trừ redirect ở data plane. Reverse proxy nếu operator tự dùng phải không log Authorization, không echo credential trong lỗi và không rewrite sang URL khác.
+HTTPS vẫn được hỗ trợ bằng system trust, không `insecure_skip_verify` và không CA arguments. TLS overlay (`../../deploy/compose/compose.agent-tls.yaml`, retired source) cùng [runbook TLS trước đây](<central-vm2-step7.md>) được giữ như lựa chọn central riêng; CA health/scrape của central không phải CA phân phối bởi Agent installer. Không tự xóa cert hoặc đổi deployment TLS đang chạy. Cert phải được Python/Telegraf tin cậy qua hệ thống; bỏ CA flags không đồng nghĩa bỏ xác minh certificate.
+
+Provisioning/report không redirect hoặc dùng proxy environment. Telegraf upstream `outputs.http` vẫn có thể theo redirect chuẩn; metrics origin phải là URL cuối không redirect. Origin pin là kiểm tra đích ban đầu, không thay firewall hay bảo vệ HTTP trước MITM. Không log Authorization hay đưa output TOML vào ticket.
 
 ## 4. Linux
 
@@ -78,16 +78,14 @@ Cài từ bundle đầy đủ, không chỉ copy một script. Key file root-own
 
 ```bash
 sudo bash agents/telegraf/linux/install.sh \
-  --management-url https://control.example.internal:3443 \
-  --gateway-origin https://metrics.example.internal:8443 \
+  --management-url http://172.16.0.4:3001 \
+  --gateway-origin http://172.16.0.4:8000 \
   --key-file /root/secure/infrapulse-agent.key \
   --telegraf-binary /root/reviewed/telegraf \
-  --telegraf-sha256 <SHA256_EXECUTABLE> \
-  --management-ca /root/secure/control-ca.pem \
-  --gateway-ca /root/secure/metrics-ca.pem
+  --telegraf-sha256 '<SHA256_EXECUTABLE>'
 ```
 
-Bỏ hai CA options khi cả hai cert được OS/Python/Telegraf tin cậy; không nhầm trust store các runtime. Đường dẫn binary phải là file executable đúng Linux/architecture, không archive. Shell scripts gọi bằng `bash` rõ ràng; không cần tự ý staging Git để đổi executable bit. Bundle/file nguồn và mọi ancestor phải không symlink; đặt bundle ở thư mục thực như `/opt/...`, không `/home` bị redirect symlink trên hệ điều hành đặc thù.
+Thay IP/port bằng origin đã review của central; không thêm CA options. Đường dẫn binary phải là file executable đúng Linux/architecture, không archive. Shell scripts gọi bằng `bash` rõ ràng; không cần tự ý staging Git để đổi executable bit. Bundle/file nguồn và mọi ancestor phải không symlink; đặt bundle ở thư mục thực như `/opt/...`, không `/home` bị redirect symlink trên hệ điều hành đặc thù.
 
 Cấu trúc runtime cố định `/opt/infrapulse-agent/releases/<release>` + internal symlink `current`. Service `infrapulse-telegraf.service`; user/group chuyên dụng `infrapulse-telegraf`, không login, không supplementary groups. Key/state root0600; TOML có Authorization root:service0640, chỉ group chuyên dụng được đọc; service không sửa config/binary. Log private `/var/lib/infrapulse-agent/telegraf.log`, rotation 10MB, 3 archives; unit UMask0077. Dùng `/var/lib` để giữ kiểm tra ancestor root-controlled trên Ubuntu có `/var/log` root:syslog0775; không đổi quyền thư mục log chung của OS. Output service không đi ra shared journal để hạn chế lộ dữ liệu.
 
@@ -97,7 +95,9 @@ Config update (sau khi Admin đổi pin profile):
 sudo bash agents/telegraf/linux/install.sh --update-config
 ```
 
-Origins, CA bundles, key và checksum binary được tái sử dụng từ trạng thái được kiểm tra. Full reinstall/binary upgrade: chạy installer với cặp `--telegraf-binary` và `--telegraf-sha256` mới; không cần nhập lại origins/key nếu cùng installation. Renderer tạo lại toàn bộ allowlisted config, không merge custom plugin thủ công. Không tự poll profile hoặc auto-upgrade.
+Origins, key và checksum binary được tái sử dụng từ trạng thái được kiểm tra. Full reinstall/binary upgrade: chạy installer với cặp `--telegraf-binary` và `--telegraf-sha256` mới; không cần nhập lại origins/key nếu cùng installation. Renderer tạo lại toàn bộ allowlisted config, không merge custom plugin thủ công. Không tự poll profile hoặc auto-upgrade.
+
+**Chuyển từ bộ cài CA cũ:** Linux lifecycle metadata mới là schema 2 (không CA). Metadata schema 1 không được tự migrate. Với cả hai OS, đổi Management origin (kể cả HTTPS → HTTP) vẫn bị từ chối để giữ identity pin. Giữ API key/IDs riêng tư, dùng uninstaller trong **concrete release cũ** đã kiểm tra ownership, rồi cài bundle mới với cùng key/IDs và origin HTTP đã review. Không sửa state để vượt guard, không xóa cert/CA đang được dịch vụ khác dùng. Đây là hướng dẫn bảo trì riêng, không tự thực hiện trên máy đang chạy.
 
 **Bản thử nghiệm trước khi sửa đường dẫn log:** nếu đã cài thành công unit dùng `/var/log/infrapulse-agent`, bundle mới không nhận nó là unit hiện tại vì kiểm tra ownership so sánh chính xác bytes. Chưa có migration in-place từ layout cũ. Giữ credential/IDs ở nơi private, dùng `bundle/linux/uninstall.sh` trong concrete release cũ đã cài, không đi qua symlink `current` (khi kiểm tra ancestry cũ vẫn hợp lệ), rồi cài bundle mới với cùng credential. Nếu unit/ancestry đã thay đổi hoặc không xác định được release cũ, dừng để operator rà soát và recovery; không sửa unit/permission guard để ép nhận installation. Không áp dụng quy trình này cho installation mới đang dùng `/var/lib`.
 
@@ -117,17 +117,15 @@ Dùng PowerShell elevated, policy chạy script theo quy định tổ chức (kh
 
 ```powershell
 & .\agents\telegraf\windows\install.ps1 `
-  -ManagementUrl 'https://control.example.internal:3443' `
-  -GatewayOrigin 'https://metrics.example.internal:8443' `
+  -ManagementUrl 'http://172.16.0.4:3001' `
+  -GatewayOrigin 'http://172.16.0.4:8000' `
   -KeyFile 'C:\Secure\InfraPulse\agent.key' `
   -TelegrafBinary 'C:\Secure\Reviewed\telegraf.exe' `
   -TelegrafSha256 '<SHA256_EXECUTABLE>' `
-  -PythonExecutable 'C:\Program Files\Python312\python.exe' `
-  -ManagementCa 'C:\Secure\InfraPulse\control-ca.pem' `
-  -GatewayCa 'C:\Secure\InfraPulse\metrics-ca.pem'
+  -PythonExecutable 'C:\Program Files\Python312\python.exe'
 ```
 
-Native Telegraf service tên `infrapulse-telegraf`, Automatic + recovery restart. Không đụng service mặc định `telegraf`. Root cố định dưới system Program Files: `InfraPulse Agent`; protected release directories chứa binary/config/CA/key/state/bundle. Không junction/symlink/reparse points. ACL SYSTEM/Administrators-only; service LocalSystem là lựa chọn deployment rõ ràng, quyền cao hơn Linux để dùng Windows counters/SCM upstream. Muốn least-privilege Windows account cần thiết kế/qualification riêng, chưa tự áp đặt gMSA.
+Native Telegraf service tên `infrapulse-telegraf`, Automatic + recovery restart. Không đụng service mặc định `telegraf`. Root cố định dưới system Program Files: `InfraPulse Agent`; protected release directories chứa binary/config/key/state/bundle. Không junction/symlink/reparse points. ACL SYSTEM/Administrators-only; service LocalSystem là lựa chọn deployment rõ ràng, quyền cao hơn Linux để dùng Windows counters/SCM upstream. Muốn least-privilege Windows account cần thiết kế/qualification riêng, chưa tự áp đặt gMSA.
 
 ```powershell
 # Sau khi Admin gán profile published khác:
@@ -163,7 +161,7 @@ Batch 100 **Telegraf metrics**/buffer1000 giới hạn cục bộ, không đồn
 ## 7. Vận hành lỗi, rollback và report retry
 
 - 401: key invalid/expired/revoked; 403: thiếu scope/identity mismatch; 409: profile chưa gán/published/receipt không hợp lệ. Sửa qua Management; không tự xin key mới.
-- HTTPS/trust/hostname/pin mismatch: xác minh certificate SAN/chain, CA đúng runtime, DNS/route/firewall và origins; không bỏ TLS verify.
+- HTTPS/trust/hostname/pin mismatch: kiểm tra DNS/route/firewall và origins; nếu dùng HTTPS, kiểm tra SAN/chain qua system trust, không bỏ TLS verify hoặc dùng lại CA flags đã bỏ.
 - Binary mismatch/sai OS/arch: cung cấp đúng reviewed binary/hash. Installer không chạy `--version`/`--test` như bước probe.
 - Foreign service, unsafe ACL/ownership, symlink/reparse/drop-in, Agent ID drift: fail closed, không tự ghi đè. Cần Admin inspect và quyết định bảo trì.
 - Nếu activation thất bại, installer cố phục hồi service/config trước đó và báo lỗi; rollback thất bại giữ dữ liệu để Admin phục hồi, không xóa mù quáng. Lệnh SCM/systemd thành công chỉ là service-manager acceptance.
@@ -189,7 +187,7 @@ Chỉ retry `applied` cho release thực đã được activate; dùng `failed` 
 
 Linux có single-writer lock + transaction journal. SIGINT/SIGTERM rollback best-effort; **SIGKILL/power loss không có đảm bảo rollback**. Journal `.transaction` làm lần sau fail closed. Admin cần đọc protected journal, kiểm tra concrete `current`/unit/service/release, phục hồi coherent state rồi mới xóa journal sau khi có backup và xác nhận; không dùng `rm -rf` theo path trong journal không kiểm tra. Windows chưa có crash-recovery journal: nếu mất điện giữa SCM change và active pointer update có thể ownership check từ chối; Admin đối chiếu SCM ImagePath với protected releases và active state trước khi phục hồi. Không có auto recovery suy đoán hoặc đảm bảo giao dịch across filesystem+service manager.
 
-Logs chứa thông tin host/URL/counter và error body, cần coi là dữ liệu nhạy cảm. Không bật Telegraf debug/print config, không dump output TOML, không thu thập Authorization vào tickets. Installer chỉ in finite local diagnostic codes, không in exception/body từ API/native commands; service log xoay vòng private dùng để điều tra chi tiết. `outputs.http.headers` dùng secret type của Telegraf để giảm lộ key; bảo vệ runtime files/CA/credential backups, không dựa vào redaction như ranh giới duy nhất. Dọn/revoke credential cũ và failed/pending releases có chủ đích; uninstall purge owned copies nhưng không xóa key file nguồn của operator.
+Logs chứa thông tin host/URL/counter và error body, cần coi là dữ liệu nhạy cảm. Không bật Telegraf debug/print config, không dump output TOML, không thu thập Authorization vào tickets. Installer chỉ in finite local diagnostic codes, không in exception/body từ API/native commands; service log xoay vòng private dùng để điều tra chi tiết. `outputs.http.headers` dùng secret type của Telegraf để giảm lộ key; bảo vệ runtime files/credential backups, không dựa vào redaction như ranh giới duy nhất. Dọn/revoke credential cũ và failed/pending releases có chủ đích; uninstall purge owned copies nhưng không xóa key file nguồn của operator.
 
 ## 8. Nguồn tham khảo upstream
 
