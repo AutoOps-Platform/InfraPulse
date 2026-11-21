@@ -1,0 +1,114 @@
+#!/bin/bash
+# ECS-optimized AL2023 host bootstrap. No app secrets or deployment work here.
+set -euo pipefail
+
+# On the ECS-optimized AMI, ecs.service is already ordered after cloud-final.
+# Install the gate first, so a later bootstrap error prevents registration.
+install -d -m 0755 /etc/systemd/system/ecs.service.d
+cat > /etc/systemd/system/ecs.service.d/20-infrapulse.conf <<'UNIT'
+[Unit]
+Requires=infrapulse-ecs-prepare.service
+After=infrapulse-ecs-prepare.service
+
+[Service]
+ExecStartPre=/usr/bin/mountpoint -q /var/lib/infrapulse/grafana-volume
+UNIT
+cat > /etc/systemd/system/infrapulse-ecs-prepare.service <<'UNIT'
+[Unit]
+Description=Isolate ECS host credentials and mount Grafana storage
+Requires=docker.service
+After=docker.service cloud-final.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/infrapulse-ecs-prepare
+RemainAfterExit=yes
+TimeoutStartSec=12min
+UNIT
+systemctl daemon-reload
+
+. /etc/os-release
+if [ "$ID" != amzn ] || [ "$VERSION_ID" != 2023 ] || [ "$(uname -m)" != x86_64 ]; then
+  echo 'Expected Amazon ECS-optimized AL2023 x86-64.' >&2
+  exit 1
+fi
+
+install -d -m 0755 /etc/ecs
+cat >> /etc/ecs/ecs.config <<'ECS'
+
+ECS_CLUSTER=${cluster_name}
+ECS_ENABLE_TASK_IAM_ROLE=true
+ECS_ENABLE_TASK_IAM_ROLE_NETWORK_HOST=false
+ECS_ENABLE_AWSLOGS_EXECUTIONROLE_OVERRIDE=true
+ECS_AVAILABLE_LOGGING_DRIVERS=["json-file","awslogs"]
+ECS
+
+# ECS-optimized AL2023 normally includes SSM Agent. If absent, use the
+# official regional AL2023/x86-64 RPM source rather than an OS change.
+if ! rpm -q amazon-ssm-agent >/dev/null 2>&1; then
+  dnf install -y https://s3.${aws_region}.amazonaws.com/amazon-ssm-${aws_region}/latest/linux_amd64/amazon-ssm-agent.rpm
+fi
+systemctl enable --now amazon-ssm-agent.service
+
+install -d -m 0755 /usr/local/sbin
+cat > /usr/local/sbin/infrapulse-ecs-prepare <<'PREPARE'
+#!/bin/bash
+set -euo pipefail
+fail() { printf '%s\n' "$1" >&2; exit 1; }
+
+# Docker's user chain runs before Docker's own allow rules. ECS's distinct
+# task credential endpoint 169.254.170.2 must stay reachable.
+if ! iptables -w -C DOCKER-USER -d 169.254.169.254/32 -j DROP; then
+  iptables -w -I DOCKER-USER 1 -d 169.254.169.254/32 -j DROP
+fi
+
+# Nitro NVMe names can change. Accept only the serial of the attached EBS
+# volume handed to us by Terraform, not a guessed /dev/nvme name.
+serial='${grafana_volume}'
+serial="$${serial/-/}"
+mountpoint=/var/lib/infrapulse/grafana-volume
+device=''
+for ((attempt=0; attempt<150; attempt++)); do
+  for block in /sys/block/nvme*n*; do
+    [ -r "$block/device/serial" ] || continue
+    read -r observed < "$block/device/serial"
+    if [ "$observed" = "$serial" ] && [ -b "/dev/$${block##*/}" ]; then
+      device="/dev/$${block##*/}"
+      break 2
+    fi
+  done
+  sleep 2
+done
+[ -b "$device" ] || fail 'Expected Grafana EBS device not found.'
+
+install -d -m 0750 "$mountpoint"
+if ! mountpoint -q "$mountpoint"; then
+  status=0
+  probe=$(blkid -p -o export "$device") || status=$?
+  case "$status" in
+    0)
+      grep -Fxq 'TYPE=ext4' <<< "$probe" && grep -Fxq 'USAGE=filesystem' <<< "$probe" || fail 'Unexpected Grafana EBS signature.'
+      if grep -q '^PTTYPE=' <<< "$probe"; then fail 'Unexpected Grafana EBS partition table.'; fi
+      ;;
+    2)
+      # No recognisable signature alone is not proof that formatting is safe.
+      # Compare the entire expected device against zero before making ext4.
+      size=$(blockdev --getsize64 "$device")
+      [ "$size" -gt 0 ] && cmp -s -n "$size" "$device" /dev/zero || fail 'Grafana EBS is not demonstrably blank.'
+      mkfs.ext4 -q "$device"
+      ;;
+    *) fail 'Could not safely identify Grafana EBS filesystem.' ;;
+  esac
+  mount -t ext4 -o nodev,nosuid "$device" "$mountpoint"
+fi
+
+actual=$(findmnt --noheadings --output SOURCE --mountpoint "$mountpoint")
+[ -n "$actual" ] && [ "$(readlink -f "$actual")" = "$(readlink -f "$device")" ] || fail 'Wrong Grafana EBS mount source.'
+[ ! -L "$mountpoint/data" ] || fail 'Refusing symlinked Grafana data directory.'
+install -d -m 0750 -o 472 -g 472 "$mountpoint/data"
+PREPARE
+chmod 0755 /usr/local/sbin/infrapulse-ecs-prepare
+
+# Do not wait here for an ECS unit that itself waits for cloud-final.
+systemctl enable ecs.service
+systemctl --no-block start ecs.service
