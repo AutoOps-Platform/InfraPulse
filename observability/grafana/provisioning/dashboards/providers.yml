@@ -9,6 +9,7 @@ providers:
     allowUiUpdates: false
     updateIntervalSeconds: 30
     options:
-      # Only the two InfraPulse adaptations; downloaded originals remain archival.
-      path: /etc/grafana/dashboards/infrapulse
+      # Only generated immutable CloudWatch outputs; never templates/original archives.
+      # Outside /var/lib/grafana so the persistent SQLite/data mount cannot shadow it.
+      path: /opt/infrapulse/dashboards
       foldersFromFilesStructure: false

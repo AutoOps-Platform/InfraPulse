@@ -1,0 +1,15 @@
+apiVersion: 1
+
+datasources:
+  - name: InfraPulse CloudWatch
+    uid: infrapulse-cloudwatch
+    type: cloudwatch
+    access: proxy
+    isDefault: true
+    editable: false
+    jsonData:
+      authType: default
+      defaultRegion: ap-southeast-1
+      customMetricsNamespaces: InfraPulse/Lab
+# Default SDK / central instance profile only: no keys, profile or AssumeRole.
+# No Logs grant just to satisfy Save & Test; shared IMDS is not container IAM isolation.
