@@ -1,3 +1,0 @@
-# Always-on basic system metrics: uptime, load average, CPU count, users.
-[[inputs.system]]
-  fielddrop = ["uptime_format"]
