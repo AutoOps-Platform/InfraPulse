@@ -7,3 +7,6 @@ allowBuilds:
   '@prisma/engines@7.10.1': true
   'prisma@7.10.1': true
   '@scarf/scarf@1.4.0': false
+minimumReleaseAgeExclude:
+  - '@aws-sdk/client-cloudwatch@3.1171.0'
+  - '@aws-sdk/client-ssm@3.1171.0'

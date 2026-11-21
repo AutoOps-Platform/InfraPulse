@@ -53,19 +53,6 @@ for(const name of Object.keys(JSON.parse(fs.readFileSync('/app/package.json','ut
 }
 JS
 
-FROM build AS test
-COPY scripts/ ./scripts/
-COPY test/ ./test/
-COPY vitest.config.ts vitest.config.integration.ts vitest.config.e2e.ts ./
-CMD ["pnpm", "test"]
-
-# Explicit operator-only tooling. No operation runs during the image build.
-FROM build AS migrate
-COPY scripts/ ./scripts/
-RUN groupadd --gid 10002 management && useradd --uid 10002 --gid 10002 --no-create-home --shell /usr/sbin/nologin management
-USER 10002:10002
-CMD ["node", "scripts/migrate-db.ts"]
-
 # Default: single process; no source, tests, operations or development CLI.
 FROM node:24.20.0-bookworm-slim@sha256:6642ef280aebc09c4541bee0b15c9f89f0f3f3c247ddee79ae1d37eddfdcbbaa AS runtime
 # These exact image-owned paths were verified in the pinned base. Keep package

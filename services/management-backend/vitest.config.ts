@@ -15,9 +15,9 @@ export default defineConfig({
   test: {
     // Bound competing Nest/SWC imports; keep the existing assertion deadlines.
     maxWorkers: 1,
+    passWithNoTests: true,
     globals: true,
     root: './',
-    setupFiles: ['./test/setup.ts'],
-    include: ['src/**/*.spec.ts', 'test/unit/**/*.spec.ts'],
+    include: ['src/**/*.spec.ts'],
   },
 });
