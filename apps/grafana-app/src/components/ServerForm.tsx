@@ -149,8 +149,7 @@ export function ServerForm({
         </Field>
         {server && (
           <Alert severity="info" title="OS changes are constrained">
-            Management rejects incompatible assignments or an active Agent with 409. Refresh current state after a
-            conflict.
+            Management requires completed, idle AWS retirement before changing OS. Refresh current state after a conflict.
           </Alert>
         )}
         {validation && (
