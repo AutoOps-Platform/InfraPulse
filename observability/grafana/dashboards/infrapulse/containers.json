@@ -1,0 +1,6 @@
+{
+  "format": "infrapulse-container-template-v1",
+  "uid": "infrapulse-containers",
+  "title": "Tổng quan Container",
+  "description": "Tổng quan & danh sách Container trên tất cả VM (Docker + cAdvisor qua AMP), theo bố cục 15798."
+}

@@ -249,11 +249,11 @@
       ],
       "parameter": {
         "name": "/infrapulse/lab-20261118/presets/linux",
-        "sha256": "f1f1e965957c6b28a99d88d01702906d3ba3daeb0bb4499462a2d2cc9f47d771",
+        "sha256": "9f05aa2ae2dc9d84c8b01322ec6925180257013b7285637402c7f751ce9c91ef",
         "tier": "Standard",
-        "version": 3
+        "version": 4
       },
-      "revision": "ff5827219cf0522a87a71421ba167d063987eefacbab05faef795a7cc000af1d",
+      "revision": "1a8e36d9991695012c8cc6af126a99d0e1d5d7907e0c76a124c5df4b21ac7632",
       "ssm": {
         "sha256": "7894f86a1d19dda791394ebc651daaa51d3d2c36a9d53a20f98adaf1b386d92f",
         "signer": null,
@@ -513,11 +513,11 @@
       ],
       "parameter": {
         "name": "/infrapulse/lab-20261118/presets/windows",
-        "sha256": "cc1dba636d143081a6d646c8f3446c72ee2ae02d718eeceab10916ae2624804d",
+        "sha256": "2d2f5f1ccd605f5a5f977151aea351dd85f560205467a6e13fc885ab59063cb0",
         "tier": "Standard",
-        "version": 2
+        "version": 3
       },
-      "revision": "dbc76853efc20805bd331b8e3af95b79407d0c835b0103c483c1ab75cd1f0b27",
+      "revision": "6b7bba93d47ee35ae860c36b4243afe8c0a22694f1aaa09dee9cb93edba5cd2d",
       "ssm": {
         "sha256": "e216f63ef75822f6bec245d796db4a1da7c0a5985ec5f6881980ec9513075f25",
         "signer": {

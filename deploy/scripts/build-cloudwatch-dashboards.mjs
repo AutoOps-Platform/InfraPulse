@@ -55,9 +55,60 @@ const badgeCell = { id: 'custom.cellOptions', value: { type: 'color-background',
 const rowPanel = (id, title, y, collapsed = false, panels = []) => ({
   id, type: 'row', title, collapsed, gridPos: { x: 0, y, w: 24, h: 1 }, panels,
 });
-const prom = (refId, expr, legendFormat = '', instant = false) => ({
-  datasource: AMP, refId, expr, legendFormat, range: !instant, instant, interval: '60s', editorMode: 'code',
+const prom = (refId, expr, legendFormat = '', instant = false, extra = {}) => ({
+  datasource: AMP, refId, expr, legendFormat, range: !instant, instant, interval: '60s', editorMode: 'code', ...extra,
 });
+const containerStateMappings = [{
+  type: 'value',
+  options: {
+    running: { text: 'Running', color: 'green', index: 0 },
+    restarting: { text: 'Restarting', color: 'orange', index: 1 },
+    exited: { text: 'Exited', color: 'red', index: 2 },
+    paused: { text: 'Paused', color: 'yellow', index: 3 },
+    dead: { text: 'Dead', color: 'red', index: 4 },
+    created: { text: 'Created', color: 'blue', index: 5 },
+  },
+}];
+const containerHealthMappings = [{
+  type: 'value',
+  options: {
+    healthy: { text: 'Healthy', color: 'green', index: 0 },
+    unhealthy: { text: 'Unhealthy', color: 'red', index: 1 },
+    starting: { text: 'Starting', color: 'orange', index: 2 },
+    none: { text: 'None', color: 'semi-dark-blue', index: 3 },
+  },
+}];
+const stateCodeMappings = [{
+  type: 'value',
+  options: {
+    '1': { text: 'Running', color: 'green', index: 0 },
+    '2': { text: 'Restarting', color: 'orange', index: 1 },
+    '3': { text: 'Paused', color: 'yellow', index: 2 },
+    '0': { text: 'Exited', color: 'red', index: 3 },
+    '4': { text: 'Dead', color: 'red', index: 4 },
+    '5': { text: 'Created', color: 'blue', index: 5 },
+  },
+}];
+const healthCodeMappings = [{
+  type: 'value',
+  options: {
+    '1': { text: 'Healthy', color: 'green', index: 0 },
+    '2': { text: 'Unhealthy', color: 'red', index: 1 },
+    '3': { text: 'Starting', color: 'orange', index: 2 },
+    '0': { text: 'None', color: 'semi-dark-blue', index: 3 },
+  },
+}];
+const oomCodeMappings = [{
+  type: 'value',
+  options: {
+    '0': { text: 'OK', color: 'green', index: 0 },
+    '1': { text: 'OOMKilled', color: 'red', index: 1 },
+  },
+}];
+const unlimitedZeroMapping = [
+  { type: 'value', options: { '0': { text: 'Unlimited', index: 0 } } },
+  { type: 'special', options: { match: 'null', result: { text: '—' } } },
+];
 const thresholdsOf = (steps, mode = 'absolute') => ({ mode, steps });
 
 function tsPanel(id, title, gridPos, targets, {
@@ -668,6 +719,311 @@ function windowsDashboard(source, targetRelease) {
   return { result: dashboard(source, panels, detailVariables('windows')), metrics: targetRelease.metrics };
 }
 
+function containersOverviewDashboard(source) {
+  const vmVar = {
+    name: 'server_id', label: 'VM', type: 'query', datasource: INVENTORY,
+    query: 'vm-options', definition: 'vm-options', hide: 0, refresh: 1, skipUrlSync: false,
+    options: [], multi: false, includeAll: true, allValue: '.*',
+    current: { selected: true, text: 'All', value: '$__all' },
+  };
+  const containerVar = {
+    name: 'container', label: 'Container', type: 'query', datasource: AMP,
+    query: { query: 'label_values(infrapulse_container_info{server_id=~"$server_id"}, container)', qryType: 1 },
+    definition: 'label_values(infrapulse_container_info{server_id=~"$server_id"}, container)',
+    hide: 0, refresh: 2, skipUrlSync: false,
+    options: [], multi: true, includeAll: true, allValue: '.*',
+    current: { selected: true, text: 'All', value: '$__all' },
+  };
+  const CSEL = 'server_id=~"$server_id",container=~"$container"';
+  const kpiStat = (id, title, gridPos, expr, thresholds) => ({
+    id, type: 'stat', title, datasource: AMP, gridPos,
+    targets: [prom('A', expr, '', true)],
+    fieldConfig: {
+      defaults: { unit: 'short', decimals: 0, noValue: '0', color: { mode: 'thresholds' }, thresholds: thresholdsOf(thresholds) },
+      overrides: [],
+    },
+    options: {
+      colorMode: 'background_solid', graphMode: 'none', justifyMode: 'center', orientation: 'horizontal',
+      textMode: 'value', wideLayout: false,
+      text: { valueSize: 28 },
+      reduceOptions: { calcs: ['lastNotNull'], fields: '', values: false },
+    },
+  });
+  const listLegend = { displayMode: 'list', placement: 'bottom', calcs: ['mean', 'lastNotNull'], showLegend: true };
+
+  const panels = [
+    // Row 1 (y=0..4, h=4) — 5 KPI Stat cards (style 15798 + container health)
+    kpiStat(1, 'Tổng Container', { x: 0, y: 0, w: 5, h: 4 },
+      `count(infrapulse_container_info{${CSEL}}) or vector(0)`,
+      [{ color: 'semi-dark-blue', value: null }]),
+    kpiStat(2, 'Running', { x: 5, y: 0, w: 5, h: 4 },
+      `sum(infrapulse_container_running{${CSEL}}) or vector(0)`,
+      [{ color: 'semi-dark-green', value: null }]),
+    kpiStat(3, 'Stopped / Exited', { x: 10, y: 0, w: 5, h: 4 },
+      `count(infrapulse_container_running{${CSEL}} == 0) or vector(0)`,
+      [{ color: 'semi-dark-green', value: null }, { color: 'semi-dark-orange', value: 1 }]),
+    kpiStat(4, 'Unhealthy / OOM', { x: 15, y: 0, w: 5, h: 4 },
+      `count((infrapulse_container_health_code{${CSEL}} == 2) or (infrapulse_container_oom_killed{${CSEL}} == 1)) or vector(0)`,
+      [{ color: 'semi-dark-green', value: null }, { color: 'semi-dark-red', value: 1 }]),
+    kpiStat(5, 'VM có Docker', { x: 20, y: 0, w: 4, h: 4 },
+      'sum(infrapulse_docker_present{server_id=~"$server_id"}) or vector(0)',
+      [{ color: 'semi-dark-purple', value: null }]),
+
+    // Row 2 (y=4..12, h=8) — Container Inventory Table with "Thuộc VM" column + drill-down links (zero horizontal scrollbar)
+    {
+      id: 6, type: 'table', title: 'Danh sách Container', datasource: { type: 'datasource', uid: '-- Mixed --' },
+      description: 'Bấm vào tên Container để mở Chi tiết Container; bấm vào Thuộc VM để mở Chi tiết VM.',
+      gridPos: { x: 0, y: 4, w: 24, h: 8 },
+      targets: [
+        prom('A', `max by (server_id, container, image, state, health, join_key) (label_join(infrapulse_container_info{${CSEL}}, "join_key", "|", "server_id", "container"))`, '', true, { format: 'table' }),
+        prom('B', `sum by (join_key) (label_join(rate(container_cpu_usage_seconds_total{${CSEL}}[3m]) * 100, "join_key", "|", "server_id", "container"))`, '', true, { format: 'table' }),
+        prom('C', `sum by (join_key) (label_join(container_memory_working_set_bytes{${CSEL}}, "join_key", "|", "server_id", "container"))`, '', true, { format: 'table' }),
+        prom('D', `max by (join_key) (label_join(infrapulse_container_memory_limit_bytes{${CSEL}}, "join_key", "|", "server_id", "container"))`, '', true, { format: 'table' }),
+        prom('E', `max by (join_key) (label_join(infrapulse_container_restarts_total{${CSEL}}, "join_key", "|", "server_id", "container"))`, '', true, { format: 'table' }),
+        { datasource: INVENTORY, refId: 'F', operation: 'fleet', view: 'table' },
+      ],
+      transformations: [
+        { id: 'joinByField', options: { byField: 'join_key', mode: 'outerTabular', keepUnjoinedFrames: true } },
+        { id: 'renameByRegex', options: { regex: '^VM ID$', renamePattern: 'server_id' } },
+        { id: 'joinByField', options: { byField: 'server_id', mode: 'outerTabular' } },
+        {
+          id: 'filterByValue',
+          options: {
+            type: 'include', match: 'all',
+            filters: [{ fieldName: 'container', config: { id: 'isNotNull', options: {} } }],
+          },
+        },
+        {
+          id: 'filterFieldsByName',
+          options: { include: { pattern: '^(server_id|container|VM|OS|image|state|health|Value #[BCDE]|Path)$' } },
+        },
+        {
+          id: 'organize',
+          options: {
+            indexByName: {
+              container: 0, VM: 1, OS: 2, image: 3, state: 4, health: 5,
+              'Value #B': 6, 'Value #C': 7, 'Value #D': 8, 'Value #E': 9,
+              server_id: 10, Path: 11,
+            },
+            renameByName: {
+              container: 'Container', VM: 'Thuộc VM', OS: 'OS', image: 'Image',
+              state: 'Trạng thái', health: 'Health',
+              'Value #B': 'CPU %', 'Value #C': 'RAM', 'Value #D': 'RAM Limit', 'Value #E': 'Restarts',
+            },
+          },
+        },
+      ],
+      fieldConfig: {
+        defaults: { noValue: '—', custom: { filterable: true, minWidth: 60 } },
+        overrides: [
+          override('server_id', { id: 'custom.hidden', value: true }),
+          override('Path', { id: 'custom.hidden', value: true }),
+          override('Container', { id: 'custom.width', value: 130 }, {
+            id: 'links',
+            value: [{
+              title: 'Chi tiết container ${__value.raw}',
+              url: '/d/infrapulse-container-detail?var-server_id=${__data.fields["server_id"]}&var-container=${__value.raw}&from=${__from}&to=${__to}',
+            }],
+          }),
+          override('Thuộc VM', { id: 'custom.width', value: 130 }, {
+            id: 'links',
+            value: [{ title: 'Chi tiết VM ${__value.raw}', url: '${__data.fields["Path"]}&from=${__from}&to=${__to}' }],
+          }),
+          override('OS', { id: 'mappings', value: statusMappings }, badgeCell, { id: 'custom.width', value: 75 }),
+          override('Image', { id: 'custom.width', value: 135 }),
+          override('Trạng thái', { id: 'mappings', value: containerStateMappings }, badgeCell, { id: 'custom.width', value: 98 }),
+          override('Health', { id: 'mappings', value: containerHealthMappings }, badgeCell, { id: 'custom.width', value: 88 }),
+          override('CPU %', { id: 'unit', value: 'percent' }, { id: 'decimals', value: 2 }, { id: 'custom.width', value: 80 }),
+          override('RAM', { id: 'unit', value: 'bytes' }, { id: 'decimals', value: 1 }, { id: 'custom.width', value: 88 }),
+          override('RAM Limit', { id: 'unit', value: 'bytes' }, { id: 'decimals', value: 0 }, { id: 'mappings', value: unlimitedZeroMapping }, { id: 'custom.width', value: 95 }),
+          override('Restarts', { id: 'unit', value: 'short' }, { id: 'decimals', value: 0 }, { id: 'custom.width', value: 80 }),
+        ],
+      },
+      options: { showHeader: true, cellHeight: 'md', sortBy: [{ displayName: 'Trạng thái', desc: true }] },
+    },
+
+    // Rows 3..6 (y=12..40, 4 wide Time Series panels matching 15798 layout)
+    tsPanel(10, 'CPU Usage', { x: 0, y: 12, w: 24, h: 7 }, [
+      prom('A', `sum by (container) (rate(container_cpu_usage_seconds_total{${CSEL}}[3m])) * 100`, '{{container}}'),
+    ], { unit: 'percent', min: 0, fillOpacity: 20, lineWidth: 2, legend: listLegend }),
+
+    tsPanel(11, 'Memory Usage', { x: 0, y: 19, w: 24, h: 7 }, [
+      prom('A', `sum by (container) (container_memory_working_set_bytes{${CSEL}})`, '{{container}}'),
+    ], { unit: 'bytes', min: 0, fillOpacity: 20, lineWidth: 2, legend: listLegend }),
+
+    tsPanel(12, 'Network', { x: 0, y: 26, w: 24, h: 7 }, [
+      prom('A', `sum by (container) (rate(container_network_receive_bytes_total{${CSEL}}[3m]))`, 'Rx {{container}}'),
+      prom('B', `sum by (container) (rate(container_network_transmit_bytes_total{${CSEL}}[3m]))`, 'Tx {{container}}'),
+    ], {
+      unit: 'Bps', fillOpacity: 20, lineWidth: 2, legend: listLegend,
+      overrides: [regexOverride('^Tx ', negY)],
+    }),
+
+    tsPanel(13, 'Disk I/O', { x: 0, y: 33, w: 24, h: 7 }, [
+      prom('A', `sum by (container) (rate(container_fs_reads_bytes_total{${CSEL}}[3m]))`, 'Read {{container}}'),
+      prom('B', `sum by (container) (rate(container_fs_writes_bytes_total{${CSEL}}[3m]))`, 'Write {{container}}'),
+    ], {
+      unit: 'Bps', fillOpacity: 20, lineWidth: 2, legend: listLegend,
+      overrides: [regexOverride('^Write ', negY)],
+    }),
+  ];
+
+  return dashboard(source, panels, [vmVar, containerVar]);
+}
+
+function containerDetailDashboard(source) {
+  const vmVar = {
+    name: 'server_id', label: 'VM', type: 'query', datasource: INVENTORY,
+    query: 'vm-options', definition: 'vm-options', hide: 0, refresh: 1, skipUrlSync: false,
+    options: [], multi: false, includeAll: false,
+  };
+  const containerVar = {
+    name: 'container', label: 'Container', type: 'query', datasource: AMP,
+    query: { query: 'label_values(infrapulse_container_info{server_id="$server_id"}, container)', qryType: 1 },
+    definition: 'label_values(infrapulse_container_info{server_id="$server_id"}, container)',
+    hide: 0, refresh: 2, skipUrlSync: false,
+    options: [], multi: false, includeAll: false,
+  };
+  const CSEL = 'server_id="$server_id",container="$container"';
+  const listLegend = { displayMode: 'list', placement: 'bottom', calcs: ['min', 'mean', 'max', 'lastNotNull'], showLegend: true };
+
+  const statCard = (id, title, gridPos, expr, { unit = 'short', decimals = 1, mappings = naMapping, thresholds = [{ color: 'green', value: null }] } = {}) => ({
+    id, type: 'stat', title, datasource: AMP, gridPos,
+    targets: [prom('A', expr, '', true)],
+    fieldConfig: {
+      defaults: { unit, decimals, mappings, color: { mode: 'thresholds' }, thresholds: thresholdsOf(thresholds) },
+      overrides: [],
+    },
+    options: {
+      colorMode: 'value', graphMode: 'none', justifyMode: 'center', orientation: 'horizontal',
+      textMode: 'value', wideLayout: false,
+      text: { valueSize: 24 },
+      reduceOptions: { calcs: ['lastNotNull'], fields: '', values: false },
+    },
+  });
+
+  const panels = [
+    // Row 1 (y=0..7, h=7) — 2-card header matching VM v6 dashboards (zero scrollbars)
+    {
+      id: 1, type: 'table', title: 'Thông tin Container', datasource: { type: 'datasource', uid: '-- Mixed --' },
+      gridPos: { x: 0, y: 0, w: 14, h: 7 },
+      targets: [
+        prom('A', `max by (server_id, container, image, container_id, ports) (infrapulse_container_info{${CSEL}})`, '', true, { format: 'table' }),
+        { datasource: INVENTORY, refId: 'B', operation: 'fleet', view: 'table' },
+      ],
+      transformations: [
+        { id: 'renameByRegex', options: { regex: '^VM ID$', renamePattern: 'server_id' } },
+        { id: 'joinByField', options: { byField: 'server_id', mode: 'inner' } },
+        { id: 'filterFieldsByName', options: { include: { pattern: '^(container|VM|image|container_id|ports)$' } } },
+        {
+          id: 'organize',
+          options: {
+            indexByName: { container: 0, VM: 1, image: 2, container_id: 3, ports: 4 },
+            renameByName: { container: 'Container', VM: 'Thuộc VM', image: 'Image', container_id: 'Container ID', ports: 'Ports' },
+          },
+        },
+        { id: 'transpose', options: { firstFieldName: 'Container', emptyFieldName: 'Giá trị' } },
+      ],
+      fieldConfig: {
+        defaults: { noValue: '—', custom: { align: 'left' } },
+        overrides: [
+          override('Container', { id: 'custom.width', value: 140 }),
+          override('Field', { id: 'custom.width', value: 140 }),
+        ],
+      },
+      options: { showHeader: true, cellHeight: 'sm', footer: { show: false } },
+    },
+    {
+      id: 2, type: 'stat', title: 'Trạng thái & Sức khỏe', datasource: AMP,
+      gridPos: { x: 14, y: 0, w: 10, h: 7 },
+      targets: [
+        prom('A', `max(infrapulse_container_state_code{${CSEL}})`, 'Trạng thái', true),
+        prom('B', `max(infrapulse_container_health_code{${CSEL}})`, 'Health', true),
+        prom('C', `max(infrapulse_container_restarts_total{${CSEL}})`, 'Restarts', true),
+        prom('D', `max(infrapulse_container_oom_killed{${CSEL}})`, 'OOM', true),
+      ],
+      fieldConfig: {
+        defaults: {
+          noValue: '—', unit: 'short', decimals: 0,
+          color: { mode: 'thresholds' },
+          thresholds: thresholdsOf([{ color: 'green', value: null }]),
+        },
+        overrides: [
+          override('Trạng thái', { id: 'mappings', value: stateCodeMappings }),
+          override('Health', { id: 'mappings', value: healthCodeMappings }),
+          override('Restarts', {
+            id: 'thresholds',
+            value: thresholdsOf([{ color: 'green', value: null }, { color: 'orange', value: 1 }, { color: 'red', value: 5 }]),
+          }),
+          override('OOM', { id: 'mappings', value: oomCodeMappings }),
+        ],
+      },
+      options: {
+        colorMode: 'background_solid', graphMode: 'none', justifyMode: 'center', orientation: 'auto',
+        textMode: 'value_and_name', wideLayout: false,
+        text: { titleSize: 12, valueSize: 18 },
+        reduceOptions: { calcs: ['lastNotNull'], fields: '', values: false },
+      },
+    },
+
+    // Row 2 (y=7..10, h=3) — 5 Stat cards (style 15798)
+    statCard(3, 'CPU Usage', { x: 0, y: 7, w: 5, h: 3 },
+      `sum(rate(container_cpu_usage_seconds_total{${CSEL}}[3m])) * 100`,
+      { unit: 'percent', decimals: 2, thresholds: [{ color: 'green', value: null }, { color: 'orange', value: 70 }, { color: 'red', value: 90 }] }),
+    statCard(4, 'RAM Working Set', { x: 5, y: 7, w: 5, h: 3 },
+      `sum(container_memory_working_set_bytes{${CSEL}})`,
+      { unit: 'bytes', decimals: 1, thresholds: [{ color: 'semi-dark-blue', value: null }] }),
+    statCard(5, 'RAM Limit', { x: 10, y: 7, w: 5, h: 3 },
+      `max(infrapulse_container_memory_limit_bytes{${CSEL}})`,
+      { unit: 'bytes', decimals: 0, mappings: unlimitedZeroMapping, thresholds: [{ color: 'text', value: null }] }),
+    statCard(6, 'RAM % Limit', { x: 15, y: 7, w: 4, h: 3 },
+      `(sum(container_memory_working_set_bytes{${CSEL}}) / (max(infrapulse_container_memory_limit_bytes{${CSEL}}) > 0)) * 100`,
+      { unit: 'percent', decimals: 1, thresholds: [{ color: 'green', value: null }, { color: 'orange', value: 75 }, { color: 'red', value: 90 }] }),
+    statCard(7, 'Uptime', { x: 19, y: 7, w: 5, h: 3 },
+      `time() - (max(infrapulse_container_started_timestamp_seconds{${CSEL}}) > 0)`,
+      { unit: 's', decimals: 0, thresholds: [{ color: 'green', value: null }] }),
+
+    // Rows 3..6 (y=10..38, 4 wide Time Series panels matching 15798 layout)
+    tsPanel(10, 'CPU Usage & Throttling', { x: 0, y: 10, w: 24, h: 7 }, [
+      prom('A', `sum(rate(container_cpu_usage_seconds_total{${CSEL}}[3m])) * 100`, 'CPU Usage %'),
+      prom('B', `(sum(rate(container_cpu_cfs_throttled_periods_total{${CSEL}}[3m])) / clamp_min(sum(rate(container_cpu_cfs_periods_total{${CSEL}}[3m])), 1)) * 100`, 'CPU Throttled %'),
+    ], {
+      unit: 'percent', min: 0, fillOpacity: 25, lineWidth: 2, legend: listLegend,
+      overrides: [override('CPU Throttled %', fixedColor('orange'))],
+    }),
+
+    tsPanel(11, 'Memory Usage', { x: 0, y: 17, w: 24, h: 7 }, [
+      prom('A', `sum(container_memory_working_set_bytes{${CSEL}})`, 'Working Set'),
+      prom('B', `sum(container_memory_rss{${CSEL}})`, 'RSS'),
+      prom('C', `sum(container_memory_cache{${CSEL}})`, 'Cache'),
+      prom('D', `max(infrapulse_container_memory_limit_bytes{${CSEL}}) > 0`, 'Memory Limit'),
+    ], {
+      unit: 'bytes', min: 0, fillOpacity: 20, lineWidth: 2, legend: listLegend,
+      overrides: [
+        override('Memory Limit', fixedColor('red'), { id: 'custom.fillOpacity', value: 0 }, { id: 'custom.lineStyle', value: { fill: 'dash', dash: [8, 6] } }),
+      ],
+    }),
+
+    tsPanel(12, 'Network', { x: 0, y: 24, w: 24, h: 7 }, [
+      prom('A', `sum(rate(container_network_receive_bytes_total{${CSEL}}[3m]))`, 'Receive'),
+      prom('B', `sum(rate(container_network_transmit_bytes_total{${CSEL}}[3m]))`, 'Transmit'),
+    ], {
+      unit: 'Bps', fillOpacity: 25, lineWidth: 2, legend: listLegend,
+      overrides: [override('Receive', fixedColor('#7EB26D')), override('Transmit', fixedColor('#EAB839'), negY)],
+    }),
+
+    tsPanel(13, 'Disk I/O', { x: 0, y: 31, w: 24, h: 7 }, [
+      prom('A', `sum(rate(container_fs_reads_bytes_total{${CSEL}}[3m]))`, 'Read'),
+      prom('B', `sum(rate(container_fs_writes_bytes_total{${CSEL}}[3m]))`, 'Write'),
+    ], {
+      unit: 'Bps', fillOpacity: 25, lineWidth: 2, legend: listLegend,
+      overrides: [override('Read', fixedColor('#6ED0E0')), override('Write', fixedColor('#EF843C'), negY)],
+    }),
+  ];
+
+  return dashboard(source, panels, [vmVar, containerVar]);
+}
+
 /** Deterministic AMP + Grafana 13 dashboard compiler. */
 export function compileCloudWatchDashboards(value, templates) {
   const release = decodeAgentRelease(value);
@@ -675,6 +1031,18 @@ export function compileCloudWatchDashboards(value, templates) {
   const fleet = fleetDashboard(fleetSource);
   const files = { 'dashboards/fleet.json': encode(fleet) };
   const entries = [{ uid: fleet.uid, templateHash: releaseSha256(fleetSource), dashboardHash: releaseSha256(fleet) }];
+  if (templates?.containers) {
+    const containersSource = template(templates.containers, 'infrapulse-containers', 'infrapulse-container-template-v1');
+    const containers = containersOverviewDashboard(containersSource);
+    files['dashboards/containers.json'] = encode(containers);
+    entries.push({ uid: containers.uid, templateHash: releaseSha256(containersSource), dashboardHash: releaseSha256(containers) });
+  }
+  if (templates?.containerDetail) {
+    const containerDetailSource = template(templates.containerDetail, 'infrapulse-container-detail', 'infrapulse-container-template-v1');
+    const containerDetail = containerDetailDashboard(containerDetailSource);
+    files['dashboards/container-detail.json'] = encode(containerDetail);
+    entries.push({ uid: containerDetail.uid, templateHash: releaseSha256(containerDetailSource), dashboardHash: releaseSha256(containerDetail) });
+  }
   const linux = release.platforms.linux;
   if (linux) {
     const detailSource = template(templates?.linux, 'infrapulse-linux-host', 'infrapulse-cloudwatch-template-v2', 'linux');
@@ -703,7 +1071,11 @@ export function compileCloudWatchDashboards(value, templates) {
 export async function loadCompiledCloudWatchDashboards() {
   const { readPublicJson, readBuildRelease } = await import('./build-inputs.mjs');
   const release = await readBuildRelease();
-  const templates = { fleet: await readPublicJson(INPUT + 'fleet.json') };
+  const templates = {
+    fleet: await readPublicJson(INPUT + 'fleet.json'),
+    containers: await readPublicJson(INPUT + 'containers.json'),
+    containerDetail: await readPublicJson(INPUT + 'container-detail.json'),
+  };
   if (release.platforms.linux) templates.linux = await readPublicJson(INPUT + 'linux-host.json');
   if (release.platforms.windows) templates.windows = await readPublicJson(INPUT + 'windows-host.json');
   return compileCloudWatchDashboards(release, templates);

@@ -13,6 +13,8 @@ const TARGET_KEYS = 'account_id,bucket,deployment_id,prefix,region,version';
 const MAX_TARGET_BYTES = 4096;
 const MAX_DASHBOARD_BYTES = 2 * 1024 * 1024;
 const ARTIFACTS = new Map([
+  ['dashboards/container-detail.json', 'infrapulse-container-detail'],
+  ['dashboards/containers.json', 'infrapulse-containers'],
   ['dashboards/fleet.json', 'infrapulse-fleet'],
   ['dashboards/linux-host.json', 'infrapulse-linux-host'],
   ['dashboards/windows-host.json', 'infrapulse-windows-host'],

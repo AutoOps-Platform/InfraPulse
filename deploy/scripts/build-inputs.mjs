@@ -5,6 +5,8 @@ const ROOT = new URL('../../', import.meta.url);
 const MAX_BYTES = 262144;
 const ALLOWED = new Set([
   'deploy/agent-release.json',
+  'observability/grafana/dashboards/infrapulse/container-detail.json',
+  'observability/grafana/dashboards/infrapulse/containers.json',
   'observability/grafana/dashboards/infrapulse/fleet.json',
   'observability/grafana/dashboards/infrapulse/linux-host.json',
   'observability/grafana/dashboards/infrapulse/windows-host.json',

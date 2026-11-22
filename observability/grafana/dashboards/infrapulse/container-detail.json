@@ -1,0 +1,6 @@
+{
+  "format": "infrapulse-container-template-v1",
+  "uid": "infrapulse-container-detail",
+  "title": "Chi tiết Container",
+  "description": "Chi tiết 1 Container: Thông tin & trạng thái (State/Health/Restarts/OOM), CPU, RAM Working Set vs Limit, Network và Disk I/O theo mẫu 15798."
+}
