@@ -13,6 +13,16 @@ resource "aws_subnet" "central" {
   tags                    = { Name = "${local.name_prefix}-central" }
 }
 
+resource "aws_subnet" "central_b" {
+  count = local.grafana_alb_enabled ? 1 : 0
+
+  vpc_id                  = aws_vpc.lab.id
+  cidr_block              = "10.42.2.0/24"
+  availability_zone       = "${var.aws_region}b"
+  map_public_ip_on_launch = false
+  tags                    = { Name = "${local.name_prefix}-central-b" }
+}
+
 resource "aws_internet_gateway" "lab" {
   vpc_id = aws_vpc.lab.id
   tags   = { Name = "${local.name_prefix}-igw" }
@@ -34,11 +44,17 @@ resource "aws_route_table_association" "central" {
   route_table_id = aws_route_table.central.id
 }
 
+resource "aws_route_table_association" "central_b" {
+  count = local.grafana_alb_enabled ? 1 : 0
+
+  subnet_id      = aws_subnet.central_b[0].id
+  route_table_id = aws_route_table.central.id
+}
+
 resource "aws_security_group" "central" {
   name        = "${local.name_prefix}-central"
   description = "Zero ingress; HTTP/HTTPS outbound for OS packages and AWS services only"
   vpc_id      = aws_vpc.lab.id
-  ingress     = []
 
   egress {
     description = "Ubuntu package repositories"
@@ -54,6 +70,17 @@ resource "aws_security_group" "central" {
     from_port   = 443
     to_port     = 443
     cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  dynamic "egress" {
+    for_each = local.grafana_tunnel_enabled ? ["tcp", "udp"] : []
+    content {
+      description = "Cloudflare Tunnel outbound edge connection (${upper(egress.value)} 7844)"
+      protocol    = egress.value
+      from_port   = 7844
+      to_port     = 7844
+      cidr_blocks = ["0.0.0.0/0"]
+    }
   }
 
   dynamic "egress" {

@@ -12,6 +12,8 @@ output "deployment_environment" {
     INFRAPULSE_LINUX_PRESET_NAME          = local.linux_preset_name
     INFRAPULSE_WINDOWS_PRESET_NAME        = local.windows_preset_name
     INFRAPULSE_METRIC_NAMESPACE           = local.metric_namespace
+    INFRAPULSE_AMP_WORKSPACE_ID           = local.amp_workspace_id
+    INFRAPULSE_AMP_ENDPOINT               = local.amp_endpoint
     }, var.publish_ssm_source ? {
     INFRAPULSE_CONFIG_DOCUMENT_VERSION       = aws_ssm_document.configure["owned"].document_version
     INFRAPULSE_DECOMMISSION_DOCUMENT_VERSION = aws_ssm_document.decommission["owned"].document_version
@@ -97,6 +99,41 @@ output "grafana_dashboard_publish" {
 output "bootstrap_bucket_name" {
   description = "Private ephemeral S3 bucket for one-time presigned bootstrap scripts (auto-expired via S3 Lifecycle)."
   value       = aws_s3_bucket.bootstrap.id
+}
+
+output "amp_workspace_id" {
+  description = "Amazon Managed Service for Prometheus workspace ID for host metrics."
+  value       = local.amp_workspace_id
+}
+
+output "amp_endpoint" {
+  description = "AMP workspace base URL for Grafana and Management Backend SigV4 PromQL queries."
+  value       = local.amp_endpoint
+}
+
+output "amp_remote_write_url" {
+  description = "AMP SigV4 remote_write URL used by Grafana Alloy on hybrid nodes."
+  value       = local.amp_remote_write_url
+}
+
+output "grafana_url" {
+  description = "Effective Grafana URL (HTTPS via ALB or Cloudflare Tunnel when enabled; otherwise ecs_runtime.grafana_issuer)."
+  value       = local.grafana_effective_issuer
+}
+
+output "grafana_tunnel_enabled" {
+  description = "Whether the Cloudflare Tunnel sidecar is enabled inside the ECS Grafana task."
+  value       = local.grafana_tunnel_enabled
+}
+
+output "grafana_alb_dns_name" {
+  description = "Public DNS name of the Grafana Application Load Balancer; null when disabled."
+  value       = try(aws_lb.grafana[0].dns_name, null)
+}
+
+output "grafana_acm_certificate_arn" {
+  description = "ACM TLS certificate ARN attached to the Grafana ALB HTTPS listener; null when disabled."
+  value       = try(aws_acm_certificate.grafana[0].arn, null)
 }
 
 output "native_qualification_status" {

@@ -34,6 +34,8 @@ locals {
       INFRAPULSE_CONFIG_DOCUMENT_NAME       = local.config_document_name
       INFRAPULSE_DECOMMISSION_DOCUMENT_NAME = local.decommission_document_name
       INFRAPULSE_METRIC_NAMESPACE           = local.metric_namespace
+      INFRAPULSE_AMP_WORKSPACE_ID           = local.amp_workspace_id
+      INFRAPULSE_AMP_ENDPOINT               = local.amp_endpoint
       INFRAPULSE_BOOTSTRAP_BUCKET           = aws_s3_bucket.bootstrap.id
       INFRAPULSE_BOOTSTRAP_URL_TTL_SECONDS  = "1800"
       }, {
@@ -41,7 +43,10 @@ locals {
     })
     grafana = {
       AWS_REGION                                = var.aws_region
-      GF_SERVER_ROOT_URL                        = var.ecs_runtime.grafana_issuer
+      AWS_SDK_LOAD_CONFIG                       = "true"
+      INFRAPULSE_AMP_ENDPOINT                   = local.amp_endpoint
+      GF_SERVER_ROOT_URL                        = local.grafana_effective_issuer
+      GF_SECURITY_COOKIE_SECURE                 = local.grafana_public_https ? "true" : "false"
       GF_DATABASE_TYPE                          = "sqlite3"
       GF_PATHS_PROVISIONING                     = "/etc/infrapulse-aws-provisioning"
       GF_PATHS_PLUGINS                          = "/opt/infrapulse/plugins"
@@ -58,7 +63,7 @@ locals {
       GF_PLUGINS_FORWARD_HOST_ENV_VARS          = "infrapulse-infrapulse-app"
       INFRAPULSE_IDENTITY_MODE                  = "grafana13-id-token"
       INFRAPULSE_ACCEPT_EXPERIMENTAL_IDENTITY   = tostring(var.ecs_runtime.accept_experimental_identity)
-      INFRAPULSE_GRAFANA_ISSUER                 = var.ecs_runtime.grafana_issuer
+      INFRAPULSE_GRAFANA_ISSUER                 = local.grafana_effective_issuer
       INFRAPULSE_GRAFANA_JWKS_URL               = var.ecs_runtime.grafana_jwks_url
       INFRAPULSE_GRAFANA_ORG_ID                 = tostring(var.ecs_runtime.grafana_org_id)
       INFRAPULSE_GRAFANA_NAMESPACE              = var.ecs_runtime.grafana_namespace
@@ -84,8 +89,8 @@ locals {
     }
     grafana = {
       uid          = "472:472"
-      cpu          = 768
-      memory       = 512
+      cpu          = 1024
+      memory       = 896
       host_port    = 3000
       start_period = 60
       health       = ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/api/health"]
@@ -107,7 +112,7 @@ locals {
   }
   ecs_secret_mount = { sourceVolume = "task-secrets", containerPath = "/run/secrets" }
   ecs_containers = {
-    for role, app in local.ecs_application : role => [
+    for role, app in local.ecs_application : role => concat([
       {
         name                   = "secret-init"
         image                  = local.ecs_images[role]
@@ -157,7 +162,38 @@ locals {
         }, role == "management" ? {
         command = ["node", "dist/main.js"]
       } : {})
-    ]
+      ], role == "grafana" && local.grafana_tunnel_enabled ? [{
+        name                   = "cloudflared"
+        image                  = var.grafana_tunnel.image
+        user                   = "65532:65532"
+        essential              = true
+        memory                 = 96
+        readonlyRootFilesystem = true
+        command = concat(
+          ["tunnel", "--no-autoupdate"],
+          var.grafana_tunnel.protocol == "auto" ? [] : ["--protocol", var.grafana_tunnel.protocol],
+          ["run"],
+        )
+        secrets = [{
+          name      = "TUNNEL_TOKEN"
+          valueFrom = var.grafana_tunnel.token_parameter_arn
+        }]
+        links     = ["grafana"]
+        dependsOn = [{ containerName = "grafana", condition = "HEALTHY" }]
+        linuxParameters = {
+          capabilities = { drop = ["ALL"] }
+          tmpfs        = [{ containerPath = "/tmp", size = 16, mountOptions = ["rw", "noexec", "nosuid", "nodev"] }]
+        }
+        dockerSecurityOptions = ["no-new-privileges"]
+        logConfiguration = {
+          logDriver = "awslogs"
+          options = {
+            awslogs-group         = aws_cloudwatch_log_group.ecs["grafana"].name
+            awslogs-region        = var.aws_region
+            awslogs-stream-prefix = "cloudflared"
+          }
+        }
+    }] : [])
   }
 }
 
@@ -223,6 +259,16 @@ resource "aws_ecs_service" "service" {
   desired_count                      = var.ecs_start_services ? 1 : 0
   deployment_minimum_healthy_percent = 0
   deployment_maximum_percent         = 100
+  health_check_grace_period_seconds  = each.key == "grafana" && local.grafana_alb_enabled ? 90 : null
+
+  dynamic "load_balancer" {
+    for_each = each.key == "grafana" && local.grafana_alb_enabled ? [1] : []
+    content {
+      target_group_arn = aws_lb_target_group.grafana[0].arn
+      container_name   = "grafana"
+      container_port   = 3000
+    }
+  }
 
   depends_on = [
     aws_volume_attachment.grafana,
@@ -230,5 +276,6 @@ resource "aws_ecs_service" "service" {
     aws_iam_role_policy.central_runtime,
     aws_iam_role_policy.management_bootstrap_s3,
     aws_iam_role_policy_attachment.ecs_metric_read,
+    aws_lb_listener.grafana_https,
   ]
 }

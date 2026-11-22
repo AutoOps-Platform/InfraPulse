@@ -163,3 +163,55 @@ variable "ecs_kms_key_arns" {
     error_message = "Use same-region, same-account KMS key ARNs (not aliases) keyed by management or grafana."
   }
 }
+
+variable "grafana_alb" {
+  description = "Optional public Application Load Balancer + ACM TLS + Route 53 DNS in front of ECS Grafana. Mutually exclusive with grafana_tunnel."
+  type = object({
+    enabled         = bool
+    domain_name     = optional(string)
+    route53_zone_id = optional(string)
+    ingress_cidrs   = optional(set(string), ["0.0.0.0/0"])
+  })
+  default = {
+    enabled = false
+  }
+  nullable = false
+
+  validation {
+    condition = !var.grafana_alb.enabled || (
+      try(can(regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$", var.grafana_alb.domain_name)), false) &&
+      try(can(regex("^Z[A-Z0-9]{1,32}$", var.grafana_alb.route53_zone_id)), false) &&
+      length(coalesce(var.grafana_alb.ingress_cidrs, [])) > 0 &&
+      alltrue([
+        for cidr in coalesce(var.grafana_alb.ingress_cidrs, []) : try(can(cidrnetmask(cidr)), false)
+      ])
+    )
+    error_message = "When grafana_alb.enabled is true, supply a lowercase domain_name, a Route 53 zone ID (Z...), and at least one valid IPv4 CIDR in ingress_cidrs."
+  }
+}
+
+variable "grafana_tunnel" {
+  description = "Optional Cloudflare Tunnel sidecar inside the ECS Grafana task for zero-inbound HTTPS access without an ALB. Mutually exclusive with grafana_alb."
+  type = object({
+    enabled             = bool
+    domain_name         = optional(string)
+    token_parameter_arn = optional(string)
+    image               = optional(string, "cloudflare/cloudflared:2026.11.1@sha256:e613aadbc2d9511785d2e67a86b0c8ac18dd63a3f9af0d06faf04cbfdcb35f2d")
+    protocol            = optional(string, "auto")
+  })
+  default = {
+    enabled = false
+  }
+  nullable = false
+
+  validation {
+    condition = !var.grafana_tunnel.enabled || (
+      !var.grafana_alb.enabled &&
+      try(can(regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$", var.grafana_tunnel.domain_name)), false) &&
+      try(can(regex("^arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/infrapulse/${var.deployment_id}/grafana/[A-Za-z0-9_][A-Za-z0-9_.-]*$", var.grafana_tunnel.token_parameter_arn)), false) &&
+      try(trimspace(var.grafana_tunnel.image) != "", false) &&
+      try(contains(["auto", "quic", "http2"], var.grafana_tunnel.protocol), false)
+    )
+    error_message = "When grafana_tunnel.enabled is true, grafana_alb.enabled must be false, domain_name must be a valid lowercase hostname, token_parameter_arn must be a same-account SSM parameter ARN under /infrapulse/<deployment>/grafana/, and protocol must be auto, quic, or http2."
+  }
+}

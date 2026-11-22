@@ -55,12 +55,18 @@ resource "aws_iam_role" "ecs_execution" {
 }
 
 locals {
+  ecs_role_parameter_arns = {
+    for role in local.ecs_roles : role => concat(
+      values(var.ecs_parameter_arns[role]),
+      role == "grafana" && local.grafana_tunnel_enabled ? [var.grafana_tunnel.token_parameter_arn] : [],
+    )
+  }
   ecs_parameter_access = {
     for role in local.ecs_roles : role => concat([
       {
         Effect   = "Allow"
         Action   = "ssm:GetParameters"
-        Resource = values(var.ecs_parameter_arns[role])
+        Resource = local.ecs_role_parameter_arns[role]
       },
       ], [for key in lookup(var.ecs_kms_key_arns, role, null)[*] : {
         Effect   = "Allow"
@@ -69,7 +75,7 @@ locals {
         Condition = {
           StringEquals = {
             "kms:ViaService"                      = "ssm.${var.aws_region}.amazonaws.com"
-            "kms:EncryptionContext:PARAMETER_ARN" = values(var.ecs_parameter_arns[role])
+            "kms:EncryptionContext:PARAMETER_ARN" = local.ecs_role_parameter_arns[role]
           }
         }
     }])
