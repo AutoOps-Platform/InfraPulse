@@ -1,6 +1,7 @@
   import { randomUUID } from 'node:crypto';
   import { Injectable } from '@nestjs/common';
   import type { Prisma } from '../../../../generated/prisma/client.js';
+  import type { AwsPort } from '../../../../integrations/aws/aws.port.js';
   import { ApiError } from '../../../common/errors.js';
   import {
     enumFilter,
@@ -52,6 +53,7 @@
   @Injectable()
   export class ServersService {
     private assets?: BootstrapAssetsPort;
+    private aws?: Pick<AwsPort, 'deregisterNode' | 'deleteUnusedActivation'>;
 
     constructor(
       private readonly prisma: PrismaService,
@@ -61,6 +63,10 @@
 
     setBootstrapAssets(assets: BootstrapAssetsPort): void {
       this.assets = assets;
+    }
+
+    setAwsPort(aws: Pick<AwsPort, 'deregisterNode' | 'deleteUnusedActivation'>): void {
+      this.aws = aws;
     }
 
     private project(
@@ -196,6 +202,76 @@
             outcome: 'success',
             request_id: requestId,
             delta: { archived_at: (existing.archived_at ?? now).toISOString() },
+          });
+        })
+        .catch(throwDatabaseError);
+    }
+
+    async remove(id: string, actor: UserPrincipal, requestId: string): Promise<void> {
+      inventoryId(id);
+      const target = await this.prisma
+        .$transaction((tx) => this.repo.cleanupTargets(tx, id))
+        .catch(throwDatabaseError);
+      if (!target) throw new ApiError('not_found');
+
+      if (this.aws) {
+        const aws = this.aws;
+        const tasks: Promise<unknown>[] = [];
+        const seenNodes = new Set<string>();
+        for (const binding of target.managed_node_bindings) {
+          if (
+            !binding.activation_id ||
+            (binding.platform !== 'linux' && binding.platform !== 'windows') ||
+            seenNodes.has(binding.managed_node_id)
+          ) {
+            continue;
+          }
+          seenNodes.add(binding.managed_node_id);
+          tasks.push(
+            aws.deregisterNode(
+              {
+                nodeId: binding.managed_node_id,
+                activationId: binding.activation_id,
+                serverId: id,
+                enrollmentId: binding.enrollment_id,
+                platform: binding.platform,
+              },
+              AbortSignal.timeout(4000),
+            ),
+          );
+        }
+        const seenActivations = new Set<string>();
+        for (const attempt of target.onboarding_attempts) {
+          if (
+            !attempt.activation_id ||
+            attempt._count.bindings > 0 ||
+            seenActivations.has(attempt.activation_id)
+          ) {
+            continue;
+          }
+          seenActivations.add(attempt.activation_id);
+          tasks.push(aws.deleteUnusedActivation(attempt.activation_id, AbortSignal.timeout(4000)));
+        }
+        if (tasks.length) {
+          await Promise.allSettled(tasks);
+        }
+      }
+
+      await this.prisma
+        .$transaction(async (tx) => {
+          await this.repo.lock(tx, id);
+          const removed = await this.repo.deleteCascade(tx, id);
+          await this.audit.append(tx, {
+            actor,
+            operation: 'delete',
+            target: { type: 'server', id },
+            outcome: 'success',
+            request_id: requestId,
+            delta: {
+              name: removed.name,
+              os: removed.os,
+              environment: removed.environment,
+            },
           });
         })
         .catch(throwDatabaseError);

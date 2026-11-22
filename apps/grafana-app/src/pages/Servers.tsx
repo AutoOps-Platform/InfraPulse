@@ -12,10 +12,19 @@ import { Confirm } from '../components/Confirm';
 import { OnboardingStatus } from '../components/OnboardingStatus';
 import { getStyles } from '../styles';
 
-export function ServerDetail({ id, onChanged }: { id: string; onChanged?: () => void }) {
+export function ServerDetail({
+  id,
+  onChanged,
+  onDeleted,
+}: {
+  id: string;
+  onChanged?: () => void;
+  onDeleted?: () => void;
+}) {
   const detail = useResource(`inventory-server:${id}`, (signal) => api.inventoryServer(id, signal));
   const [edit, setEdit] = useState(false);
   const [archive, setArchive] = useState(false);
+  const [remove, setRemove] = useState(false);
   const admin = useAdmin();
   const s = useStyles2(getStyles);
   const refresh = () => { detail.retry(); onChanged?.(); };
@@ -32,6 +41,7 @@ export function ServerDetail({ id, onChanged }: { id: string; onChanged?: () => 
         </dl>
         <div className={s.row}>
           {admin && !detail.data.archived_at && <Button variant="secondary" onClick={() => setEdit(true)}>Edit VM</Button>}
+          {admin && <Button variant="destructive" onClick={() => setRemove(true)}>Delete VM</Button>}
         </div>
       </>}
     </LoadState>
@@ -51,6 +61,11 @@ export function ServerDetail({ id, onChanged }: { id: string; onChanged?: () => 
           warning="Archive is not AWS decommission. Management rejects unresolved AWS ownership, including CleanupRequired. Finish decommission and inspect its persisted receipt first. Inventory, lifecycle history and audit remain; there is no restore UI."
           operation={() => api.archiveServer(id)} onDone={refresh} onClose={() => setArchive(false)}
         />}
+        {remove && admin && <Confirm
+          title={`Delete VM "${detail.data.name}" permanently?`}
+          warning="This permanently deletes the VM from InfraPulse inventory and onboarding history, frees its capacity slot, and attempts to deregister its AWS SSM managed node if still present. Historical audit logs remain. This action cannot be undone."
+          operation={() => api.deleteServer(id)} onDone={() => { onDeleted?.(); }} onClose={() => setRemove(false)}
+        />}
     </>}
   </section>;
 }
@@ -62,12 +77,25 @@ export default function Servers() {
   const [environment, setEnvironment] = useState('');
   const [archive, setArchive] = useState('false');
   const [create, setCreate] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Server>();
   const admin = useAdmin();
   const s = useStyles2(getStyles);
   const list = useCursor({ name, os, environment, archive }, api.servers, !selected);
   const select = (server: Server) => setParams({ server: server.id });
   const fleet = fleetHref();
-  if (selected) return <ServerDetail key={selected} id={selected} onChanged={list.retry} />;
+  if (selected) {
+    return (
+      <ServerDetail
+        key={selected}
+        id={selected}
+        onChanged={list.retry}
+        onDeleted={() => {
+          setParams({});
+          list.retry();
+        }}
+      />
+    );
+  }
   return <>
     <h1>VMs</h1>
     <p>Manage VM inventory and onboarding. Open a VM to view its current setup progress.</p>
@@ -82,16 +110,28 @@ export default function Servers() {
       {admin && <Button onClick={() => setCreate(true)}>Add VM</Button>}
     </div>
     <LoadState {...list} empty={list.data?.items.length === 0}>
-      <Table caption="AWS Server inventory — onboarding, metrics and alert sync are independent" headings={['Name', 'Server ID', 'OS / environment', 'Onboarding / health / alert sync', 'Archived', 'Detail']}>
+      <Table caption="AWS Server inventory — onboarding, metrics and alert sync are independent" headings={['Name', 'Server ID', 'OS / environment', 'Onboarding / health / alert sync', 'Archived', 'Actions']}>
         {list.data?.items.map((server) => <tr key={server.id}>
           <td>{server.name}</td><td>{server.id}</td><td>{server.os} / {server.environment}</td>
           <td><OnboardingStatus progress={server.onboarding} compact /></td>
           <td>{server.archived_at ? 'Yes' : 'No'}</td>
-          <td><Button variant="secondary" size="sm" onClick={() => select(server)}>Open detail</Button></td>
+          <td>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <Button variant="secondary" size="sm" onClick={() => select(server)}>Open detail</Button>
+              {admin && <Button variant="destructive" size="sm" onClick={() => setDeleteTarget(server)}>Delete</Button>}
+            </div>
+          </td>
         </tr>)}
       </Table>
     </LoadState>
     <Pager {...list} nextCursor={list.data?.next_cursor} />
     {create && admin && <ServerForm onClose={() => setCreate(false)} onSaved={(server) => { list.retry(); select(server); }} />}
+    {deleteTarget && admin && <Confirm
+      title={`Delete VM "${deleteTarget.name}" permanently?`}
+      warning="This permanently deletes the VM from InfraPulse inventory and onboarding history, frees its capacity slot, and attempts to deregister its AWS SSM managed node if still present. Historical audit logs remain. This action cannot be undone."
+      operation={() => api.deleteServer(deleteTarget.id)}
+      onDone={list.retry}
+      onClose={() => setDeleteTarget(undefined)}
+    />}
   </>;
 }

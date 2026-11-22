@@ -88,6 +88,10 @@ func TestManagementRouteAllowlistAndQueryBinding(t *testing.T) {
 	if err != nil || actual != "/"+good {
 		t.Error("valid query octets were not retained")
 	}
+	forceDelete := "api/v1/servers/11111111-1111-4111-8111-111111111111?force=true"
+	if got, err := managementTarget("DELETE", forceDelete, "api/v1/servers/11111111-1111-4111-8111-111111111111"); err != nil || got != "/"+forceDelete {
+		t.Error("force delete route was rejected")
+	}
 	cases := [][3]string{
 		{"GET", "https://attacker.invalid/api/v1/me", "api/v1/me"},
 		{"GET", "//attacker.invalid/api/v1/me", "api/v1/me"},

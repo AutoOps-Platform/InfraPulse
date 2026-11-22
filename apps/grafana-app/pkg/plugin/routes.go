@@ -31,7 +31,7 @@ var managementRoutes = []allowedRoute{
 	route("GET", `/api/v1/me`),
 	route("GET", `/api/v1/servers`, "limit", "cursor", "name", "os", "environment", "group", "archive"),
 	route("POST", `/api/v1/servers`),
-	route("GET", `/api/v1/servers/`+uuidSegment), route("PATCH", `/api/v1/servers/`+uuidSegment), route("DELETE", `/api/v1/servers/`+uuidSegment),
+	route("GET", `/api/v1/servers/`+uuidSegment), route("PATCH", `/api/v1/servers/`+uuidSegment), route("DELETE", `/api/v1/servers/`+uuidSegment, "force"),
 	route("GET", `/api/v1/servers/`+uuidSegment+`/onboarding`),
 	route("POST", `/api/v1/servers/`+uuidSegment+`/onboarding/bootstrap`),
 	route("POST", `/api/v1/servers/`+uuidSegment+`/onboarding/bootstrap-link`),

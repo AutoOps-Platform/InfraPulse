@@ -74,4 +74,55 @@ export class ServersRepository {
   async writeArchive(tx: Tx, id: string, data: Prisma.ServerUncheckedUpdateInput): Promise<void> {
     await tx.server.update({ where: { id }, data, select: { id: true } });
   }
+
+  cleanupTargets(tx: Tx, id: string) {
+    return tx.server.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        managed_node_bindings: {
+          where: { state: { not: 'Retired' } },
+          select: {
+            managed_node_id: true,
+            activation_id: true,
+            enrollment_id: true,
+            platform: true,
+          },
+        },
+        onboarding_attempts: {
+          where: { activation_id: { not: null } },
+          select: {
+            activation_id: true,
+            _count: { select: { bindings: true } },
+          },
+        },
+      },
+    });
+  }
+
+  async deleteCascade(
+    tx: Tx,
+    id: string,
+  ): Promise<{ name: string; os: string; environment: string }> {
+    const existing = await tx.server.findUniqueOrThrow({
+      where: { id },
+      select: { name: true, os: true, environment: true },
+    });
+    await tx.bindingAlertReceipt.deleteMany({ where: { binding: { server_id: id } } });
+    await tx.managedNodeBinding.deleteMany({ where: { server_id: id } });
+    await tx.decommissionProtocol.deleteMany({ where: { attempt: { server_id: id } } });
+    await tx.onboardingRequestReceipt.deleteMany({ where: { attempt: { server_id: id } } });
+    await tx.onboardingAttempt.deleteMany({ where: { server_id: id } });
+    await tx.agentProvisioningReceipt.deleteMany({ where: { agent: { server_id: id } } });
+    await tx.apiCredential.updateMany({
+      where: { agent: { server_id: id }, rotated_from_id: { not: null } },
+      data: { rotated_from_id: null },
+    });
+    await tx.apiCredential.deleteMany({ where: { agent: { server_id: id } } });
+    await tx.agent.deleteMany({ where: { server_id: id } });
+    await tx.serverGroupMember.deleteMany({ where: { server_id: id } });
+    await tx.serverProfile.deleteMany({ where: { server_id: id } });
+    await tx.server.delete({ where: { id } });
+    return existing;
+  }
 }

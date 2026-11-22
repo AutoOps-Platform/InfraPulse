@@ -61,6 +61,7 @@ export interface AuditEvent {
     | 'create'
     | 'update'
     | 'archive'
+    | 'delete'
     | 'group_membership'
     | 'register'
     | 'lifecycle'

@@ -170,4 +170,5 @@ export const api = {
   decommission: async (serverId: string, input: BootstrapIntent, signal?: AbortSignal) =>
     progress(await request<unknown>(`api/v1/servers/${id(serverId)}/decommission`, 'POST', intent(input), signal), serverId),
   archiveServer: (serverId: string) => request<void>(`api/v1/servers/${id(serverId)}`, 'DELETE'),
+  deleteServer: (serverId: string) => request<void>(`api/v1/servers/${id(serverId)}?force=true`, 'DELETE'),
 };

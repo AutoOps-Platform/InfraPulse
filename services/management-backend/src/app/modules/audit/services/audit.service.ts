@@ -69,6 +69,7 @@ const ALLOWED_OPERATIONS = [
   'create',
   'update',
   'archive',
+  'delete',
   'group_membership',
   'register',
   'lifecycle',

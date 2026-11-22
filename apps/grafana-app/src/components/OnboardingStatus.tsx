@@ -42,7 +42,7 @@ export function OnboardingStatus({ progress: p, configuration, unavailable = fal
         <dt>Observed hostname / IP</dt><dd>{observed(p.agent.hostname)} / {observed(p.agent.ipAddress)}</dd>
         <dt>Observed OS version / mi-ID</dt><dd>{observed(p.agent.osVersion)} / {observed(p.agent.nodeId)}</dd>
         <dt>SSM status / agent version / last ping</dt><dd>{observed(p.agent.ssmStatus)} / {observed(p.agent.ssmAgentVersion)} / {observedTime(p.agent.ssmLastPingAt)}</dd>
-        <dt>CloudWatch version / service</dt><dd>{observed(p.agent.cloudWatchVersion)} / {observed(p.agent.cloudWatchServiceState)}</dd>
+        <dt>Metrics agent (Alloy) / service</dt><dd>{observed(p.agent.cloudWatchVersion)} / {observed(p.agent.cloudWatchServiceState)}</dd>
         <dt>Metadata observed at</dt><dd>{observedTime(p.agent.observedAt)}</dd>
         <dt>Configuration revision</dt><dd>{observed(configuration?.version ?? null)}</dd>
         <dt>AWS command status</dt><dd>{observed(configuration?.status ?? null)}</dd>

@@ -20,6 +20,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { ApiError } from '../../../common/errors.js';
 import { inventoryPageSchema } from '../../../common/http.js';
 import type { PageQuery } from '../../../common/pagination.js';
 import { CurrentUser, UserRoles, type UserPrincipal } from '../../auth/guards/auth.guard.js';
@@ -86,12 +87,24 @@ export class ServersController {
   @HttpCode(204)
   @UserRoles('Admin')
   @ApiNoContentResponse({ description: 'Atomic mutation committed; no-store.' })
-  @ApiOperation({ summary: 'Archive server' })
+  @ApiOperation({ summary: 'Archive or permanently delete server' })
   archive(
     @Param('id') id: string,
+    @Query() query: Record<string, unknown>,
     @CurrentUser() actor: UserPrincipal,
     @Req() req: AuditRequest,
   ) {
+    const keys = Object.keys(query);
+    if (keys.some((key) => key !== 'force')) {
+      throw new ApiError('invalid_request');
+    }
+    const force = query.force;
+    if (force !== undefined && force !== 'true' && force !== 'false') {
+      throw new ApiError('invalid_request');
+    }
+    if (force === 'true') {
+      return this.serversService.remove(id, actor, req.managementRequestId);
+    }
     return this.serversService.archive(id, actor, req.managementRequestId);
   }
 

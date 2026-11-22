@@ -48,7 +48,9 @@ export async function createManagementApp(
     });
 
     if (qualified) {
-      app.get(ServersService).setBootstrapAssets(qualified.assets);
+      const servers = app.get(ServersService);
+      servers.setBootstrapAssets(qualified.assets);
+      servers.setAwsPort(qualified.aws);
     }
     installHttpBoundary(app, config);
     installOpenApi(app);
