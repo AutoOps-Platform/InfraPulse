@@ -18,11 +18,13 @@ RUN go build -mod=readonly -trimpath -ldflags='-s -w' -o /out/gpx_infrapulse_lin
 
 FROM docker.io/grafana/grafana:13.3.0@sha256:6e5d306338670f381a942f1c50d3c266bf71531e5ddd9ee4fc1a133dac5ce63d
 USER 0:0
-RUN mkdir -p /opt/infrapulse/dashboards
+RUN mkdir -p /opt/infrapulse/dashboards /opt/infrapulse/plugins \
+    && grafana cli --pluginsDir /opt/infrapulse/plugins plugins install grafana-amazonprometheus-datasource \
+    && chown -R 472:472 /opt/infrapulse/plugins
 COPY --from=frontend --chown=472:472 /build/dist/ /opt/infrapulse/plugins/infrapulse-infrapulse-app/
 COPY --from=backend --chown=472:472 --chmod=0755 /out/gpx_infrapulse_linux_amd64 /opt/infrapulse/plugins/infrapulse-infrapulse-app/gpx_infrapulse_linux_amd64
 COPY apps/grafana-app/provisioning/app.yaml /etc/infrapulse-aws-provisioning/plugins/app.yaml
 COPY apps/grafana-app/provisioning/inventory.yml /etc/infrapulse-aws-provisioning/datasources/inventory.yml
-COPY observability/grafana/provisioning/datasources/cloudwatch.yml /etc/infrapulse-aws-provisioning/datasources/cloudwatch.yml
+COPY observability/grafana/provisioning/datasources/amp.yml /etc/infrapulse-aws-provisioning/datasources/amp.yml
 COPY observability/grafana/provisioning/dashboards/providers.yml /etc/infrapulse-aws-provisioning/dashboards/providers.yml
 USER 472:472

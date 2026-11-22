@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { open, lstat, mkdir, rename, unlink } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
-import { decodeAgentRelease, canonicalJson, cloudWatchPreset } from './agent-release.mjs';
+import { decodeAgentRelease, canonicalJson, alloyPreset } from './agent-release.mjs';
 
 const ROOT = new URL('../../', import.meta.url);
 const LIMIT = 262144;
@@ -71,7 +71,7 @@ export function compileAgentDocuments(release) {
   const cleanup = JSON.parse(source(readFileSync(new URL('agents/ssm/documents/cleanup.json.tpl', ROOT), 'utf8')));
   const presets = {};
   for (const [platform, p] of Object.entries(release.platforms)) {
-    presets[platform] = { name: p.parameter.name, version: String(p.parameter.version), tier: p.parameter.tier, value: canonicalJson(cloudWatchPreset(platform, p)), sha256: p.parameter.sha256 };
+    presets[platform] = { name: p.parameter.name, version: String(p.parameter.version), tier: p.parameter.tier, value: canonicalJson(alloyPreset(platform, p)), sha256: p.parameter.sha256 };
   }
   const step = (platform, action, lines) => ({
     action: platform === 'linux' ? 'aws:runShellScript' : 'aws:runPowerShellScript', name: action + (platform === 'linux' ? 'Linux' : 'Windows'),
@@ -86,7 +86,13 @@ export function compileAgentDocuments(release) {
     const preamble = [...t.preamble];
     preamble.splice(platform === 'linux' ? preamble.findIndex(line => line.startsWith('[[ $(id -u)')) : preamble.indexOf('try {') + 1, 0, bound);
     const lines = [...preamble, ...(action === 'cleanup' ? cleanup[platform] : t[action]), ...(t.epilogue ?? [])];
-    const projection = { cloudWatch: p.cloudWatch, parameter: p.parameter, configuration: { plugins: p.configuration.plugins.map(plugin => ({ plugin: plugin.plugin, resources: plugin.resources, measurements: [{ input: plugin.measurements[0].input }] })) } };
+    const projection = {
+      alloy: p.alloy,
+      amp: p.amp,
+      parameter: p.parameter,
+      presetJson: presets[platform].value,
+      configuration: { plugins: p.configuration.plugins.map(plugin => ({ plugin: plugin.plugin, resources: plugin.resources })) },
+    };
     const encoded = Buffer.from(canonicalJson(projection)).toString('base64');
     return lines.map(line => line.replaceAll('@@ACTION@@', action).replaceAll('@@RELEASE@@', encoded));
   };
@@ -99,11 +105,10 @@ export function compileAgentDocuments(release) {
       } else if (clean) mainSteps.push(step(platform, 'cleanup', script(platform, 'cleanup')));
       else {
         mainSteps.push(step(platform, 'prepare', script(platform, 'prepare')));
-        mainSteps.push({ action: 'aws:configurePackage', name: 'install' + (platform === 'linux' ? 'Linux' : 'Windows'), precondition: { StringEquals: ['platformType', platform === 'linux' ? 'Linux' : 'Windows'] }, inputs: { onFailure: 'exit', name: 'AmazonCloudWatchAgent', version: p.cloudWatch.packageVersion, action: 'Install', installationType: 'Uninstall and reinstall' } });
         mainSteps.push(step(platform, 'configure', script(platform, 'configure')));
       }
     }
-    const result = { schemaVersion: '2.2', description: clean ? 'InfraPulse owned CloudWatch stop and durable decommission fence; never uninstall SSM' : 'InfraPulse sequential pinned AWS CloudWatch package and configuration', parameters: commandParameters(), mainSteps };
+    const result = { schemaVersion: '2.2', description: clean ? 'InfraPulse owned Grafana Alloy stop and durable decommission fence; never uninstall SSM' : 'InfraPulse pinned Grafana Alloy installation and AMP SigV4 configuration', parameters: commandParameters(), mainSteps };
     if (Buffer.byteLength(encodeBundle(result)) > 65536) fail('DOCUMENT_TOO_LARGE');
     return result;
   };

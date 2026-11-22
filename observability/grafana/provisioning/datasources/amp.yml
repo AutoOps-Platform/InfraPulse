@@ -1,0 +1,17 @@
+apiVersion: 1
+
+datasources:
+  - name: InfraPulse AMP
+    uid: infrapulse-amp
+    type: grafana-amazonprometheus-datasource
+    access: proxy
+    url: ${INFRAPULSE_AMP_ENDPOINT}
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMethod: POST
+      timeInterval: 60s
+      sigV4Auth: true
+      sigV4AuthType: default
+      sigV4Region: ap-southeast-1
+      defaultRegion: ap-southeast-1

@@ -31,8 +31,6 @@ function artifact(value, platform, helper) {
   text(value.sha256, hash); signer(value.signer, platform);
   text(value.version, helper ? /^sha256:[a-f0-9]{64}$/ : /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/);
   if (helper) {
-    // AWS publishes setup-cli at this fixed URL; its VERSION is the verified
-    // content digest, not the mutable URL label. Keep the existing trust rule.
     if (value.version !== `sha256:${value.sha256}` || value.url !== 'https://amazon-ssm-ap-southeast-1.s3.ap-southeast-1.amazonaws.com/latest/' + (platform === 'linux' ? 'debian_amd64/ssm-setup-cli' : 'windows_amd64/ssm-setup-cli.exe')) invalid();
     return;
   }
@@ -45,17 +43,33 @@ function artifact(value, platform, helper) {
     || !url.pathname.split('/').includes(value.version)
     || (platform === 'linux' ? !url.pathname.endsWith('/amazon-ssm-agent.deb') : !url.pathname.endsWith('/AmazonSSMAgentSetup.exe'))) invalid();
 }
+function alloyArtifact(value, platform) {
+  exact(value, ['version', 'url', 'sha256']);
+  text(value.version, /^[0-9]+\.[0-9]+\.[0-9]+$/);
+  text(value.sha256, hash);
+  if (typeof value.url !== 'string' || value.url.length > 1024 || value.url.includes('..')) invalid();
+  let url; try { url = new URL(value.url); } catch { invalid(); }
+  if (url.protocol !== 'https:' || url.hostname !== 'github.com' || url.username || url.password || url.port || url.search || url.hash
+    || !url.pathname.startsWith(`/grafana/alloy/releases/download/v${value.version}/`)
+    || (platform === 'linux' ? !url.pathname.endsWith('/alloy-linux-amd64.zip') : !url.pathname.endsWith('/alloy-installer-windows-amd64.exe.zip'))) invalid();
+}
+function ampConfig(value) {
+  exact(value, ['workspaceId', 'region', 'remoteWriteUrl']);
+  text(value.workspaceId, /^ws-[a-z0-9-]{8,64}$/);
+  if (value.region !== 'ap-southeast-1') invalid();
+  if (value.remoteWriteUrl !== `https://aps-workspaces.${value.region}.amazonaws.com/workspaces/${value.workspaceId}/api/v1/remote_write`) invalid();
+}
 const linuxInputs = {
-  cpu: { usage_active: ['Percent', 'gauge'], usage_idle: ['Percent', 'gauge'], usage_user: ['Percent', 'gauge'], usage_system: ['Percent', 'gauge'], usage_iowait: ['Percent', 'gauge'], usage_steal: ['Percent', 'gauge'] },
-  mem: { used_percent: ['Percent', 'gauge'], available_percent: ['Percent', 'gauge'], used: ['Bytes', 'gauge'], available: ['Bytes', 'gauge'], total: ['Bytes', 'gauge'] },
-  disk: { used_percent: ['Percent', 'gauge'], used: ['Bytes', 'gauge'], free: ['Bytes', 'gauge'], total: ['Bytes', 'gauge'] },
-  net: { bytes_sent: ['Bytes/Second', 'rate'], bytes_recv: ['Bytes/Second', 'rate'], packets_sent: ['Count/Second', 'rate'], packets_recv: ['Count/Second', 'rate'] },
+  cpu: { node_cpu_seconds_total: ['Count', 'counter'] },
+  mem: { node_memory_MemAvailable_bytes: ['Bytes', 'gauge'] },
+  disk: { node_filesystem_avail_bytes: ['Bytes', 'gauge'] },
+  net: { node_network_receive_bytes_total: ['Bytes', 'counter'] },
 };
 const windowsInputs = {
-  Processor: { '% Processor Time': ['Percent', 'gauge'] },
-  Memory: { '% Committed Bytes In Use': ['Percent', 'gauge'], 'Committed Bytes': ['Bytes', 'gauge'] },
-  LogicalDisk: { '% Free Space': ['Percent', 'gauge'] },
-  'Network Interface': { 'Bytes Sent/sec': ['Bytes/Second', 'rate'], 'Bytes Received/sec': ['Bytes/Second', 'rate'], 'Packets Sent/sec': ['Count/Second', 'rate'], 'Packets Received/sec': ['Count/Second', 'rate'] },
+  Processor: { windows_cpu_time_total: ['Count', 'counter'] },
+  Memory: { windows_memory_available_bytes: ['Bytes', 'gauge'] },
+  LogicalDisk: { windows_logical_disk_free_bytes: ['Bytes', 'gauge'] },
+  'Network Interface': { windows_net_bytes_received_total: ['Bytes', 'counter'] },
 };
 const groups = { cpu: 'cpu', mem: 'memory', disk: 'disk', net: 'network', Processor: 'cpu', Memory: 'memory', LogicalDisk: 'disk', 'Network Interface': 'network' };
 const kinds = { cpu: 'cpu', memory: 'memory', disk: 'filesystem', network: 'interface' };
@@ -75,8 +89,8 @@ function configuration(value, platform) {
   unique(metrics.map(m => m.key));
   for (const m of metrics) {
     exact(m, ['key', 'group', 'namespace', 'metricName', 'resourceId', 'dimensions', 'statistic', 'aggregation', 'unit', 'periodSeconds', 'semantics']);
-    text(m.key, id); text(m.metricName, /^[A-Za-z0-9 _%./()-]{1,128}$/);
-    if (m.namespace !== 'InfraPulse/Lab' || !Object.values(groups).includes(m.group) || m.periodSeconds !== 60 || !stats.includes(m.statistic)) invalid();
+    text(m.key, id); text(m.metricName, /^[A-Za-z_][A-Za-z0-9_:]{0,127}$/);
+    if (m.namespace !== 'InfraPulse/AMP' || !Object.values(groups).includes(m.group) || m.periodSeconds !== 60 || !stats.includes(m.statistic)) invalid();
     list(m.aggregation, 4); unique(m.aggregation);
     if (!m.aggregation.includes(m.statistic) || m.aggregation.some(s => !stats.includes(s))) invalid();
     if (m.resourceId !== null) text(m.resourceId, id);
@@ -85,46 +99,28 @@ function configuration(value, platform) {
   for (const p of plugins) {
     exact(p, ['plugin', 'resources', 'measurements']);
     if (!Object.hasOwn(inputs, p.plugin)) invalid();
-    const group = groups[p.plugin], memoryWithoutResource = platform === 'linux' && p.plugin === 'mem';
-    list(p.resources, 32, memoryWithoutResource ? 0 : 1);
-    if ((memoryWithoutResource && p.resources.length) || (['cpu', 'memory'].includes(group) && !memoryWithoutResource && p.resources.length !== 1)) invalid();
-    unique(p.resources.map(r => r.selector));
-    for (const r of p.resources) {
-      exact(r, ['id', 'kind', 'selector', 'dimensions']); text(r.id, id); dimensions(r.dimensions);
-      if (r.kind !== kinds[group] || r.dimensions.some(d => /[${}]/.test(d.value))) invalid();
-      let expected;
-      if (platform === 'linux') {
-        if (group === 'cpu') { if (r.selector !== 'cpu-total') invalid(); expected = [{ name: 'cpu', value: 'cpu-total' }]; }
-        if (group === 'network') { text(r.selector, /^[A-Za-z0-9_.:-]{1,64}$/); if (r.selector === 'lo') invalid(); expected = [{ name: 'interface', value: r.selector }]; }
-        if (group === 'disk') {
-          text(r.selector, /^\/(?:[A-Za-z0-9_.-]+\/?)*$/); if (r.selector.includes('..')) invalid();
-          if (canonicalJson(r.dimensions.map(d => d.name)) !== '["device","fstype","path"]' || r.dimensions[2].value !== r.selector
-            || /^(proc|sysfs|tmpfs|devtmpfs|overlay|squashfs|cgroup2?|debugfs|tracefs|securityfs|pstore|autofs|fusectl|mqueue|hugetlbfs|rpc_pipefs|nsfs)$/.test(r.dimensions[1].value)) invalid();
-          expected = r.dimensions;
-        }
-      } else {
-        if (group === 'cpu' && r.selector !== '_Total') invalid();
-        if (group === 'memory' && r.selector !== '') invalid();
-        if (group === 'disk') text(r.selector, /^[A-Z]:$/);
-        if (group === 'network') { text(r.selector, /^[A-Za-z0-9 _().-]{1,128}$/); if (/loopback/i.test(r.selector)) invalid(); }
-        expected = [...(group === 'memory' ? [] : [{ name: 'instance', value: r.selector }]), { name: 'objectname', value: p.plugin }];
-      }
-      if (canonicalJson(expected) !== canonicalJson(r.dimensions)) invalid();
-      resources.push(r);
-    }
+    const group = groups[p.plugin];
+    list(p.resources, 1, 1);
+    const r = p.resources[0];
+    exact(r, ['id', 'kind', 'selector', 'dimensions']);
+    text(r.id, id); dimensions(r.dimensions);
+    if (r.kind !== kinds[group] || r.dimensions.some(d => /[${}]/.test(d.value))) invalid();
+    const expected = [{ name: 'collector', value: platform === 'linux' ? 'unix' : 'windows' }];
+    if (canonicalJson(expected) !== canonicalJson(r.dimensions)) invalid();
+    resources.push(r);
+
     list(p.measurements, 16); unique(p.measurements.map(m => m.input));
     for (const measurement of p.measurements) {
       exact(measurement, ['input', 'metricKeys']);
       const semantic = inputs[p.plugin][measurement.input]; if (!semantic) invalid();
       list(measurement.metricKeys, 32); unique(measurement.metricKeys);
       const specs = measurement.metricKeys.map(key => metrics.find(m => m.key === key));
-      if (specs.some(m => !m || m.group !== group || m.unit !== semantic[0] || m.semantics !== semantic[1])
+      if (specs.some(m => !m || m.group !== group || m.unit !== semantic[0] || m.semantics !== semantic[1] || m.metricName !== measurement.input)
         || new Set(specs.map(m => m.metricName)).size !== 1
-        || canonicalJson(specs.map(m => m.resourceId).sort()) !== canonicalJson((memoryWithoutResource ? [null] : p.resources.map(r => r.id)).sort())) invalid();
+        || canonicalJson(specs.map(m => m.resourceId).sort()) !== canonicalJson(p.resources.map(x => x.id).sort())) invalid();
       for (const m of specs) {
-        const r = resources.find(r => r.id === m.resourceId);
-        const expected = [...identity.map(name => ({ name, value: '${' + name + '}' })), ...(r?.dimensions ?? []).map(d => ({ name: d.name, value: '${native.' + r.id + '.' + d.name + '}' }))].sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
-        if (canonicalJson(expected) !== canonicalJson(m.dimensions)) invalid();
+        const expectedDims = [...identity.map(name => ({ name, value: '${' + name + '}' })), ...r.dimensions.map(d => ({ name: d.name, value: '${native.' + r.id + '.' + d.name + '}' }))].sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+        if (canonicalJson(expectedDims) !== canonicalJson(m.dimensions)) invalid();
       }
       covered.push(...measurement.metricKeys);
     }
@@ -133,19 +129,105 @@ function configuration(value, platform) {
   unique(metrics.map(m => canonicalJson([m.namespace, m.metricName, m.dimensions])));
   if (canonicalJson(covered.sort()) !== canonicalJson(metrics.map(m => m.key).sort())) invalid();
 }
-/** Native preset has only reviewed metrics/identity slots, never arbitrary agent settings or credentials. */
-export function cloudWatchPreset(platform, release) {
+
+const LINUX_KEEP_REGEX = '^(up|node_uname_info|node_time_seconds|node_boot_time_seconds|node_cpu_seconds_total|node_load1|node_load5|node_load15|node_pressure_(cpu|memory|io)_waiting_seconds_total|node_pressure_irq_stalled_seconds_total|node_memory_(MemTotal|MemFree|MemAvailable|Buffers|Cached|Slab|SReclaimable|SwapTotal|SwapFree|SwapCached)_bytes|node_filesystem_(size|avail|free)_bytes|node_disk_(read_bytes|written_bytes|reads_completed|writes_completed)_total|node_disk_io_time_seconds_total|node_network_(receive|transmit)_(bytes|packets|errs|drop)_total|node_procs_(running|blocked)|node_forks_total|node_context_switches_total|node_intr_total|node_filefd_(allocated|maximum)|node_sockstat_(sockets_used|TCP_inuse|TCP_tw|UDP_inuse))$';
+
+const WINDOWS_KEEP_REGEX = '^(up|windows_cpu_time_total|windows_cpu_logical_processor|windows_cs_(logical_processors|physical_memory_bytes)|windows_memory_(physical_total_bytes|physical_free_bytes|available_bytes|committed_bytes|commit_limit|swap_page_operations_total)|windows_os_(physical_memory_free_bytes|visible_memory_bytes|virtual_memory_bytes|virtual_memory_free_bytes|processes|time)|windows_system_(system_up_time|boot_time_timestamp|processor_queue_length|processes|threads)|windows_logical_disk_(size_bytes|free_bytes|read_bytes_total|write_bytes_total|reads_total|writes_total|split_ios_total)|windows_net_(bytes_total|bytes_received_total|bytes_sent_total|packets_received_total|packets_sent_total|packets_outbound_discarded_total|packets_received_discarded_total|packets_outbound_errors_total|packets_received_errors_total)|windows_time_computed_time_offset_seconds)$';
+
+function alloyRiverConfig(platform, release) {
+  const exporter = platform === 'linux'
+    ? [
+        'prometheus.exporter.unix "host" {',
+        '  set_collectors = ["cpu", "diskstats", "filefd", "filesystem", "loadavg", "meminfo", "netdev", "pressure", "sockstat", "stat", "time", "uname", "vmstat"]',
+        '}',
+      ].join('\n')
+    : [
+        'prometheus.exporter.windows "host" {',
+        '  enabled_collectors = ["cpu", "cs", "logical_disk", "memory", "net", "os", "system", "time"]',
+        '}',
+      ].join('\n');
+  const targetRef = platform === 'linux' ? 'prometheus.exporter.unix.host.targets' : 'prometheus.exporter.windows.host.targets';
+  const relabelRules = platform === 'linux'
+    ? [
+        '  rule {',
+        '    source_labels = ["__name__"]',
+        `    regex         = "${LINUX_KEEP_REGEX}"`,
+        '    action        = "keep"',
+        '  }',
+        '  rule {',
+        '    source_labels = ["fstype"]',
+        '    regex         = "^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fuse.*|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|pstore|rpc_pipefs|securityfs|squashfs|sysfs|tracefs|tmpfs|ramfs)$"',
+        '    action        = "drop"',
+        '  }',
+        '  rule {',
+        '    source_labels = ["mountpoint"]',
+        '    regex         = "^/(dev|proc|run|sys|snap|boot)(/.*)?$"',
+        '    action        = "drop"',
+        '  }',
+        '  rule {',
+        '    source_labels = ["device"]',
+        '    regex         = "^(lo|loop.*|ram.*|dm-.*|veth.*|docker.*|br-.*)$"',
+        '    action        = "drop"',
+        '  }',
+      ].join('\n')
+    : [
+        '  rule {',
+        '    source_labels = ["__name__"]',
+        `    regex         = "${WINDOWS_KEEP_REGEX}"`,
+        '    action        = "keep"',
+        '  }',
+        '  rule {',
+        '    source_labels = ["volume"]',
+        '    regex         = "^HarddiskVolume.*$"',
+        '    action        = "drop"',
+        '  }',
+      ].join('\n');
+
+  return [
+    exporter,
+    '',
+    'prometheus.scrape "host" {',
+    `  targets         = ${targetRef}`,
+    '  scrape_interval = "60s"',
+    '  scrape_timeout  = "30s"',
+    '  forward_to      = [prometheus.relabel.filter.receiver]',
+    '}',
+    '',
+    'prometheus.relabel "filter" {',
+    '  forward_to = [prometheus.remote_write.amp.receiver]',
+    relabelRules,
+    '}',
+    '',
+    'prometheus.remote_write "amp" {',
+    '  external_labels = {',
+    '    server_id       = "${ServerId}",',
+    '    managed_node_id = "${ManagedNodeId}",',
+    '    enrollment_id   = "${EnrollmentId}",',
+    `    platform        = "${platform}",`,
+    '  }',
+    '  endpoint {',
+    `    url = "${release.amp.remoteWriteUrl}"`,
+    '    sigv4 {',
+    `      region = "${release.amp.region}"`,
+    '    }',
+    '  }',
+    '}',
+    '',
+  ].join('\n');
+}
+
+/** Canonical Alloy preset payload stored in SSM Parameter Store and Neon profile_versions. */
+export function alloyPreset(platform, release) {
   return {
-    agent: { metrics_collection_interval: 60, region: 'ap-southeast-1', omit_hostname: true },
-    metrics: { namespace: 'InfraPulse/Lab', metrics_collected: Object.fromEntries(release.configuration.plugins.map(p => [p.plugin, {
-      metrics_collection_interval: 60,
-      append_dimensions: Object.fromEntries(identity.map(name => [name, '${' + name + '}'])),
-      ...(p.resources.length && p.plugin !== 'Memory' && !(platform === 'linux' && p.plugin === 'cpu') ? { resources: p.resources.map(r => r.selector) } : {}),
-      ...(platform === 'linux' && p.plugin === 'cpu' ? { totalcpu: true } : {}),
-      measurement: p.measurements.map(m => { const spec = release.metrics.find(s => s.key === m.metricKeys[0]); return { name: m.input, rename: spec.metricName, unit: spec.unit }; }),
-    }])) },
+    agent: 'alloy',
+    ampRemoteWriteUrl: release.amp.remoteWriteUrl,
+    config: alloyRiverConfig(platform, release),
+    scrapeIntervalSeconds: 60,
+    version: release.alloy.version,
   };
 }
+export const cloudWatchPreset = alloyPreset;
+
 /** The sole release decoder. Missing OS entries are unavailable, not malformed defaults. */
 export function decodeAgentRelease(value) {
   exact(value, ['schemaVersion', 'platforms']);
@@ -153,24 +235,19 @@ export function decodeAgentRelease(value) {
   if (!value.platforms || typeof value.platforms !== 'object' || Array.isArray(value.platforms) || Object.getPrototypeOf(value.platforms) !== Object.prototype
     || Object.keys(value.platforms).some(p => !['linux', 'windows'].includes(p))) invalid();
   for (const [platform, p] of Object.entries(value.platforms)) {
-    exact(p, ['revision', 'ssm', 'helper', 'cloudWatch', 'configuration', 'metrics', 'parameter']);
+    exact(p, ['revision', 'ssm', 'helper', 'alloy', 'amp', 'configuration', 'metrics', 'parameter']);
     text(p.revision, hash); artifact(p.ssm, platform, false); artifact(p.helper, platform, true);
-    // Shared onFailure inputs require SSM >=3.0.502; preserve the existing
-    // bootstrap protocol's exact reviewed SSM pin until Task2 switches it.
     if (p.ssm.version !== '3.3.5828.0') invalid();
-    exact(p.cloudWatch, ['packageVersion', 'version', 'files', 'signer']);
-    text(p.cloudWatch.packageVersion, /^[0-9]+(?:\.[0-9]+){2,3}(?:b[0-9]+)?$/); text(p.cloudWatch.version, /^[0-9]+\.[0-9]+\.[0-9]+(?:\.[0-9]+|b[0-9]+)?$/);
-    exact(p.cloudWatch.files, ['agent', 'downloader', 'control']);
-    for (const digest of Object.values(p.cloudWatch.files)) text(digest, hash);
-    signer(p.cloudWatch.signer, platform); configuration(p, platform);
+    alloyArtifact(p.alloy, platform);
+    ampConfig(p.amp);
+    configuration(p, platform);
     exact(p.parameter, ['name', 'version', 'tier', 'sha256']);
     if (p.parameter.name !== `/infrapulse/lab-20261118/presets/${platform}` || !Number.isSafeInteger(p.parameter.version) || p.parameter.version < 1 || p.parameter.version > 1000000 || !['Standard', 'Advanced'].includes(p.parameter.tier)) invalid();
     text(p.parameter.sha256, hash);
-    const preset = cloudWatchPreset(platform, p);
+    const preset = alloyPreset(platform, p);
     if (releaseSha256(preset) !== p.parameter.sha256 || Buffer.byteLength(canonicalJson(preset)) > (p.parameter.tier === 'Standard' ? 4096 : 8192)) invalid();
     const { revision, ...body } = p;
     if (releaseSha256(body) !== revision) invalid();
   }
-  // Return detached JSON only; downstream consumers do not reimplement validation.
   return JSON.parse(canonicalJson(value));
 }

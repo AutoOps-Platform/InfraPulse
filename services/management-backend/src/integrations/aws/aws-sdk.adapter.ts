@@ -19,6 +19,7 @@ import {
   SendCommandCommand,
 } from '@aws-sdk/client-ssm';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { queryAmpRange, type AmpRangePoint } from './amp-query.js';
 import { parseStrictJson } from '../../app/common/pagination.js';
 import {
   buildQueries,
@@ -68,6 +69,13 @@ export interface AwsClients {
   metrics: AwsSender;
   s3?: AwsSender;
   presignGet?: (command: GetObjectCommand, expiresIn: number) => Promise<string>;
+  ampQueryRange?: (
+    promql: string,
+    startSec: number,
+    endSec: number,
+    stepSec: number,
+    signal: AbortSignal,
+  ) => Promise<AmpRangePoint[]>;
 }
 
 type ContainerCredentials = ReturnType<typeof import('@aws-sdk/credential-provider-http').fromHttp>;
@@ -123,6 +131,21 @@ export function createAwsClients(
       },
     },
     presignGet: (command, expiresIn) => getSignedUrl(s3, command, { expiresIn }),
+    ...(config.ampEndpoint
+      ? {
+          ampQueryRange: (promql, startSec, endSec, stepSec, signal) =>
+            queryAmpRange({
+              endpoint: config.ampEndpoint!,
+              region: config.region,
+              credentials: () => s3.config.credentials(),
+              promql,
+              startSec,
+              endSec,
+              stepSec,
+              signal,
+            }),
+        }
+      : {}),
   };
 }
 
@@ -893,7 +916,7 @@ export class AwsSdkAdapter implements AwsPort {
               summary.step !== (c.kind === 'Configure' ? 'configure' : 'cleanup') ||
               summary.errorCode !== null ||
               (c.kind === 'Configure' &&
-                summary.cloudWatchVersion !== this.assertCommand(c).cloudWatch.version)
+                summary.cloudWatchVersion !== this.assertCommand(c).alloy.version)
             ) {
               fail('invalid_response');
             }
@@ -1000,7 +1023,7 @@ export class AwsSdkAdapter implements AwsPort {
     signal: AbortSignal,
   ): Promise<MetricReadResult> => {
     try {
-      return await this.scope(signal, 5000, async (s) => {
+      return await this.scope(signal, 10000, async (s) => {
         if (
           !queries.length ||
           queries.length > 100 ||
@@ -1064,6 +1087,46 @@ export class AwsSdkAdapter implements AwsPort {
           dimensions: q.dimensions,
           points: [],
         }));
+
+        if (this.clients.ampQueryRange) {
+          const ampQuery = this.clients.ampQueryRange;
+          const alignedStart = Math.floor(+window.start / 60_000) * 60_000;
+          const startSec = Math.floor(alignedStart / 1000);
+          const endSec = Math.floor(+window.end / 1000);
+          const selector = (b: MetricQuery['binding']): string =>
+            `server_id="${b.serverId}",managed_node_id="${b.nodeId}",enrollment_id="${b.enrollmentId}"`;
+          const promqlFor = (metricName: string, b: MetricQuery['binding']): string => {
+            const sel = selector(b);
+            if (metricName === 'windows_memory_available_bytes') {
+              return `count(windows_memory_available_bytes{${sel}} or windows_os_physical_memory_free_bytes{${sel}} or windows_memory_physical_free_bytes{${sel}})`;
+            }
+            if (metricName === 'windows_net_bytes_received_total') {
+              return `count(windows_net_bytes_received_total{${sel}} or windows_net_bytes_total{${sel}})`;
+            }
+            return `count(${metricName}{${sel}})`;
+          };
+          const results = await Promise.all(
+            queries.map((q, i) => ampQuery(promqlFor(resolved[i].metricName, q.binding), startSec, endSec, 60, s)),
+          );
+          for (let i = 0; i < results.length; i++) {
+            const seenTs = new Set<number>();
+            for (const pt of results[i]) {
+              if (
+                pt.timestampMs < alignedStart ||
+                pt.timestampMs >= +window.end ||
+                !Number.isFinite(pt.value) ||
+                seenTs.has(pt.timestampMs)
+              ) {
+                continue;
+              }
+              seenTs.add(pt.timestampMs);
+              series[i].points.push({ timestamp: new Date(pt.timestampMs).toISOString(), value: pt.value });
+            }
+            series[i].points.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+          }
+          return { kind: 'Complete', series };
+        }
+
         let token: string | undefined;
         const seenTokens = new Set<string>();
         const seenPoints = new Set<string>();

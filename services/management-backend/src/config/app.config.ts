@@ -28,6 +28,7 @@ export interface AwsConfig {
   readonly roleName: string;
   readonly eligibility: string;
   readonly namespace: 'InfraPulse/Lab';
+  readonly ampEndpoint: string | null;
   readonly configDocument: string;
   readonly configVersion: string | null;
   readonly cleanupDocument: string;
@@ -134,6 +135,14 @@ export function validateAwsConfig(env: NodeJS.ProcessEnv): AwsConfig {
     if (value !== 'infrapulse-lab-20261118-bootstrap-491333778094') invalid();
     return value;
   };
+  const readAmpEndpoint = (): string | null => {
+    const value = env.INFRAPULSE_AMP_ENDPOINT;
+    if (value === undefined) return null;
+    if (!/^https:\/\/aps-workspaces\.ap-southeast-1\.amazonaws\.com\/workspaces\/ws-[a-z0-9-]{8,64}\/$/.test(value)) {
+      invalid();
+    }
+    return value;
+  };
 
   return Object.freeze({
     region: 'ap-southeast-1',
@@ -143,6 +152,7 @@ export function validateAwsConfig(env: NodeJS.ProcessEnv): AwsConfig {
     roleName: FIXED_AWS_ENV.INFRAPULSE_HYBRID_ROLE_NAME,
     eligibility: FIXED_AWS_ENV.INFRAPULSE_ELIGIBILITY_VALUE,
     namespace: 'InfraPulse/Lab',
+    ampEndpoint: readAmpEndpoint(),
     configDocument: readDocName(
       'INFRAPULSE_CONFIG_DOCUMENT_NAME',
       'InfraPulse-lab-20261118-Configure',

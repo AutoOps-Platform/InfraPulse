@@ -117,17 +117,11 @@ resource "aws_iam_role_policy" "hybrid_node" {
         Condition = local.regional_condition
       },
       {
-        # Classic custom metrics cannot be scoped with metric resource ARNs.
-        Sid      = "LabMetricPublication"
-        Effect   = "Allow"
-        Action   = "cloudwatch:PutMetricData"
-        Resource = "*"
-        Condition = {
-          StringEquals = {
-            "aws:RequestedRegion"  = var.aws_region
-            "cloudwatch:namespace" = local.metric_namespace
-          }
-        }
+        Sid       = "AmpMetricRemoteWrite"
+        Effect    = "Allow"
+        Action    = "aps:RemoteWrite"
+        Resource  = local.amp_workspace_arn
+        Condition = local.regional_condition
       },
     ]
   })
@@ -292,10 +286,15 @@ resource "aws_iam_policy" "metric_read" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Sid       = "RegionalClassicMetricReads"
-      Effect    = "Allow"
-      Action    = ["cloudwatch:GetMetricData", "cloudwatch:GetMetricStatistics", "cloudwatch:ListMetrics"]
-      Resource  = "*"
+      Sid    = "AmpWorkspaceMetricReads"
+      Effect = "Allow"
+      Action = [
+        "aps:QueryMetrics",
+        "aps:GetLabels",
+        "aps:GetSeries",
+        "aps:GetMetricMetadata",
+      ]
+      Resource  = local.amp_workspace_arn
       Condition = local.regional_condition
     }]
   })

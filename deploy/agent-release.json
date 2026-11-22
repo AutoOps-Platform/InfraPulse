@@ -1,22 +1,22 @@
 {
   "platforms": {
     "linux": {
-      "cloudWatch": {
-        "files": {
-          "agent": "c9b97bf601b66603d1c056c7d8f6e6ea4e3f07ca169ba3708bf2cf622af7dedf",
-          "control": "15e7528fbb8dea498b4241163e58b035682f013ce1463380485376fe9dd1e3c7",
-          "downloader": "37f8c8a03aeb39f7aef6a9682be6bee51e5b64b339ee429fcb0661026add742b"
-        },
-        "packageVersion": "1.300074.1b2005",
-        "signer": null,
-        "version": "1.300074.1b2005"
+      "alloy": {
+        "sha256": "62d177feb18c9b6ffd636c8273aa82a6afc75a507d096ff951749df23c3176f9",
+        "url": "https://github.com/grafana/alloy/releases/download/v1.22.0/alloy-linux-amd64.zip",
+        "version": "1.22.0"
+      },
+      "amp": {
+        "region": "ap-southeast-1",
+        "remoteWriteUrl": "https://aps-workspaces.ap-southeast-1.amazonaws.com/workspaces/ws-3db7fbfa-f694-41f9-a077-a1d2cc1cef0d/api/v1/remote_write",
+        "workspaceId": "ws-3db7fbfa-f694-41f9-a077-a1d2cc1cef0d"
       },
       "configuration": {
         "plugins": [
           {
             "measurements": [
               {
-                "input": "usage_active",
+                "input": "node_cpu_seconds_total",
                 "metricKeys": [
                   "cpu_busy"
                 ]
@@ -27,32 +27,44 @@
               {
                 "dimensions": [
                   {
-                    "name": "cpu",
-                    "value": "cpu-total"
+                    "name": "collector",
+                    "value": "unix"
                   }
                 ],
                 "id": "cpu_total",
                 "kind": "cpu",
-                "selector": "cpu-total"
+                "selector": "unix"
               }
             ]
           },
           {
             "measurements": [
               {
-                "input": "used_percent",
+                "input": "node_memory_MemAvailable_bytes",
                 "metricKeys": [
                   "memory_used"
                 ]
               }
             ],
             "plugin": "mem",
-            "resources": []
+            "resources": [
+              {
+                "dimensions": [
+                  {
+                    "name": "collector",
+                    "value": "unix"
+                  }
+                ],
+                "id": "memory",
+                "kind": "memory",
+                "selector": "unix"
+              }
+            ]
           },
           {
             "measurements": [
               {
-                "input": "used_percent",
+                "input": "node_filesystem_avail_bytes",
                 "metricKeys": [
                   "disk_used"
                 ]
@@ -63,34 +75,20 @@
               {
                 "dimensions": [
                   {
-                    "name": "device",
-                    "value": "sda1"
-                  },
-                  {
-                    "name": "fstype",
-                    "value": "ext4"
-                  },
-                  {
-                    "name": "path",
-                    "value": "/"
+                    "name": "collector",
+                    "value": "unix"
                   }
                 ],
                 "id": "root_disk",
                 "kind": "filesystem",
-                "selector": "/"
+                "selector": "unix"
               }
             ]
           },
           {
             "measurements": [
               {
-                "input": "bytes_sent",
-                "metricKeys": [
-                  "network_sent"
-                ]
-              },
-              {
-                "input": "bytes_recv",
+                "input": "node_network_receive_bytes_total",
                 "metricKeys": [
                   "network_received"
                 ]
@@ -101,13 +99,13 @@
               {
                 "dimensions": [
                   {
-                    "name": "interface",
-                    "value": "eth0"
+                    "name": "collector",
+                    "value": "unix"
                   }
                 ],
-                "id": "eth0",
+                "id": "primary_nic",
                 "kind": "interface",
-                "selector": "eth0"
+                "selector": "unix"
               }
             ]
           }
@@ -138,19 +136,19 @@
               "value": "${ServerId}"
             },
             {
-              "name": "cpu",
-              "value": "${native.cpu_total.cpu}"
+              "name": "collector",
+              "value": "${native.cpu_total.collector}"
             }
           ],
           "group": "cpu",
           "key": "cpu_busy",
-          "metricName": "cpu_usage_active",
-          "namespace": "InfraPulse/Lab",
+          "metricName": "node_cpu_seconds_total",
+          "namespace": "InfraPulse/AMP",
           "periodSeconds": 60,
           "resourceId": "cpu_total",
-          "semantics": "gauge",
+          "semantics": "counter",
           "statistic": "Average",
-          "unit": "Percent"
+          "unit": "Count"
         },
         {
           "aggregation": [
@@ -168,17 +166,21 @@
             {
               "name": "ServerId",
               "value": "${ServerId}"
+            },
+            {
+              "name": "collector",
+              "value": "${native.memory.collector}"
             }
           ],
           "group": "memory",
           "key": "memory_used",
-          "metricName": "mem_used_percent",
-          "namespace": "InfraPulse/Lab",
+          "metricName": "node_memory_MemAvailable_bytes",
+          "namespace": "InfraPulse/AMP",
           "periodSeconds": 60,
-          "resourceId": null,
+          "resourceId": "memory",
           "semantics": "gauge",
           "statistic": "Average",
-          "unit": "Percent"
+          "unit": "Bytes"
         },
         {
           "aggregation": [
@@ -198,27 +200,19 @@
               "value": "${ServerId}"
             },
             {
-              "name": "device",
-              "value": "${native.root_disk.device}"
-            },
-            {
-              "name": "fstype",
-              "value": "${native.root_disk.fstype}"
-            },
-            {
-              "name": "path",
-              "value": "${native.root_disk.path}"
+              "name": "collector",
+              "value": "${native.root_disk.collector}"
             }
           ],
           "group": "disk",
           "key": "disk_used",
-          "metricName": "disk_used_percent",
-          "namespace": "InfraPulse/Lab",
+          "metricName": "node_filesystem_avail_bytes",
+          "namespace": "InfraPulse/AMP",
           "periodSeconds": 60,
           "resourceId": "root_disk",
           "semantics": "gauge",
           "statistic": "Average",
-          "unit": "Percent"
+          "unit": "Bytes"
         },
         {
           "aggregation": [
@@ -238,60 +232,28 @@
               "value": "${ServerId}"
             },
             {
-              "name": "interface",
-              "value": "${native.eth0.interface}"
-            }
-          ],
-          "group": "network",
-          "key": "network_sent",
-          "metricName": "net_bytes_sent",
-          "namespace": "InfraPulse/Lab",
-          "periodSeconds": 60,
-          "resourceId": "eth0",
-          "semantics": "rate",
-          "statistic": "Average",
-          "unit": "Bytes/Second"
-        },
-        {
-          "aggregation": [
-            "Average"
-          ],
-          "dimensions": [
-            {
-              "name": "EnrollmentId",
-              "value": "${EnrollmentId}"
-            },
-            {
-              "name": "ManagedNodeId",
-              "value": "${ManagedNodeId}"
-            },
-            {
-              "name": "ServerId",
-              "value": "${ServerId}"
-            },
-            {
-              "name": "interface",
-              "value": "${native.eth0.interface}"
+              "name": "collector",
+              "value": "${native.primary_nic.collector}"
             }
           ],
           "group": "network",
           "key": "network_received",
-          "metricName": "net_bytes_recv",
-          "namespace": "InfraPulse/Lab",
+          "metricName": "node_network_receive_bytes_total",
+          "namespace": "InfraPulse/AMP",
           "periodSeconds": 60,
-          "resourceId": "eth0",
-          "semantics": "rate",
+          "resourceId": "primary_nic",
+          "semantics": "counter",
           "statistic": "Average",
-          "unit": "Bytes/Second"
+          "unit": "Bytes"
         }
       ],
       "parameter": {
         "name": "/infrapulse/lab-20261118/presets/linux",
-        "sha256": "e5a6c2b0a153dce3f03915f3634c8343ebf1284ab9ae94239b5126bd220a5529",
+        "sha256": "f1f1e965957c6b28a99d88d01702906d3ba3daeb0bb4499462a2d2cc9f47d771",
         "tier": "Standard",
-        "version": 2
+        "version": 3
       },
-      "revision": "5a6a423c1ab0c39677cd1977f3515979fd49da2cc31831eb03cf795310b10ae6",
+      "revision": "ff5827219cf0522a87a71421ba167d063987eefacbab05faef795a7cc000af1d",
       "ssm": {
         "sha256": "7894f86a1d19dda791394ebc651daaa51d3d2c36a9d53a20f98adaf1b386d92f",
         "signer": null,
@@ -300,25 +262,22 @@
       }
     },
     "windows": {
-      "cloudWatch": {
-        "files": {
-          "agent": "ea52e60cf748b8cf71eda7c63783d09b5a245a2d39d319e9cb16550a87b0099f",
-          "control": "a619c4ce5442e9b54b5173cc0ffaa9d0c3cbff5223b4dfd3c5ef0bef1eb9e19a",
-          "downloader": "11c45c6d2d42afd4d2bc7705e5c136e7b0979bb6886f169e3a7340e8af5c83ac"
-        },
-        "packageVersion": "1.300075.0b2061",
-        "signer": {
-          "certificateSha256": "5bf978ec2e349db046de2c8374409fe6bca4e572d371150b7fb70b2800d63003",
-          "subject": "Amazon Web Services, Inc."
-        },
-        "version": "1.300075.0b2061"
+      "alloy": {
+        "sha256": "b3de884e65e8400cef1ee3079e99c6f2c125745723b40cb33236c63dd8029252",
+        "url": "https://github.com/grafana/alloy/releases/download/v1.22.0/alloy-installer-windows-amd64.exe.zip",
+        "version": "1.22.0"
+      },
+      "amp": {
+        "region": "ap-southeast-1",
+        "remoteWriteUrl": "https://aps-workspaces.ap-southeast-1.amazonaws.com/workspaces/ws-3db7fbfa-f694-41f9-a077-a1d2cc1cef0d/api/v1/remote_write",
+        "workspaceId": "ws-3db7fbfa-f694-41f9-a077-a1d2cc1cef0d"
       },
       "configuration": {
         "plugins": [
           {
             "measurements": [
               {
-                "input": "% Processor Time",
+                "input": "windows_cpu_time_total",
                 "metricKeys": [
                   "cpu_busy"
                 ]
@@ -329,24 +288,20 @@
               {
                 "dimensions": [
                   {
-                    "name": "instance",
-                    "value": "_Total"
-                  },
-                  {
-                    "name": "objectname",
-                    "value": "Processor"
+                    "name": "collector",
+                    "value": "windows"
                   }
                 ],
                 "id": "cpu_total",
                 "kind": "cpu",
-                "selector": "_Total"
+                "selector": "windows"
               }
             ]
           },
           {
             "measurements": [
               {
-                "input": "% Committed Bytes In Use",
+                "input": "windows_memory_available_bytes",
                 "metricKeys": [
                   "memory_used"
                 ]
@@ -357,20 +312,20 @@
               {
                 "dimensions": [
                   {
-                    "name": "objectname",
-                    "value": "Memory"
+                    "name": "collector",
+                    "value": "windows"
                   }
                 ],
                 "id": "memory",
                 "kind": "memory",
-                "selector": ""
+                "selector": "windows"
               }
             ]
           },
           {
             "measurements": [
               {
-                "input": "% Free Space",
+                "input": "windows_logical_disk_free_bytes",
                 "metricKeys": [
                   "disk_free"
                 ]
@@ -381,30 +336,20 @@
               {
                 "dimensions": [
                   {
-                    "name": "instance",
-                    "value": "C:"
-                  },
-                  {
-                    "name": "objectname",
-                    "value": "LogicalDisk"
+                    "name": "collector",
+                    "value": "windows"
                   }
                 ],
                 "id": "system_disk",
                 "kind": "filesystem",
-                "selector": "C:"
+                "selector": "windows"
               }
             ]
           },
           {
             "measurements": [
               {
-                "input": "Bytes Sent/sec",
-                "metricKeys": [
-                  "network_sent"
-                ]
-              },
-              {
-                "input": "Bytes Received/sec",
+                "input": "windows_net_bytes_received_total",
                 "metricKeys": [
                   "network_received"
                 ]
@@ -415,17 +360,13 @@
               {
                 "dimensions": [
                   {
-                    "name": "instance",
-                    "value": "Microsoft Hyper-V Network Adapter"
-                  },
-                  {
-                    "name": "objectname",
-                    "value": "Network Interface"
+                    "name": "collector",
+                    "value": "windows"
                   }
                 ],
                 "id": "primary_nic",
                 "kind": "interface",
-                "selector": "Microsoft Hyper-V Network Adapter"
+                "selector": "windows"
               }
             ]
           }
@@ -459,23 +400,19 @@
               "value": "${ServerId}"
             },
             {
-              "name": "instance",
-              "value": "${native.cpu_total.instance}"
-            },
-            {
-              "name": "objectname",
-              "value": "${native.cpu_total.objectname}"
+              "name": "collector",
+              "value": "${native.cpu_total.collector}"
             }
           ],
           "group": "cpu",
           "key": "cpu_busy",
-          "metricName": "win_cpu_usage_active",
-          "namespace": "InfraPulse/Lab",
+          "metricName": "windows_cpu_time_total",
+          "namespace": "InfraPulse/AMP",
           "periodSeconds": 60,
           "resourceId": "cpu_total",
-          "semantics": "gauge",
+          "semantics": "counter",
           "statistic": "Average",
-          "unit": "Percent"
+          "unit": "Count"
         },
         {
           "aggregation": [
@@ -495,19 +432,19 @@
               "value": "${ServerId}"
             },
             {
-              "name": "objectname",
-              "value": "${native.memory.objectname}"
+              "name": "collector",
+              "value": "${native.memory.collector}"
             }
           ],
           "group": "memory",
           "key": "memory_used",
-          "metricName": "win_mem_used_percent",
-          "namespace": "InfraPulse/Lab",
+          "metricName": "windows_memory_available_bytes",
+          "namespace": "InfraPulse/AMP",
           "periodSeconds": 60,
           "resourceId": "memory",
           "semantics": "gauge",
           "statistic": "Average",
-          "unit": "Percent"
+          "unit": "Bytes"
         },
         {
           "aggregation": [
@@ -527,23 +464,19 @@
               "value": "${ServerId}"
             },
             {
-              "name": "instance",
-              "value": "${native.system_disk.instance}"
-            },
-            {
-              "name": "objectname",
-              "value": "${native.system_disk.objectname}"
+              "name": "collector",
+              "value": "${native.system_disk.collector}"
             }
           ],
           "group": "disk",
           "key": "disk_free",
-          "metricName": "win_disk_free_percent",
-          "namespace": "InfraPulse/Lab",
+          "metricName": "windows_logical_disk_free_bytes",
+          "namespace": "InfraPulse/AMP",
           "periodSeconds": 60,
           "resourceId": "system_disk",
           "semantics": "gauge",
           "statistic": "Average",
-          "unit": "Percent"
+          "unit": "Bytes"
         },
         {
           "aggregation": [
@@ -563,68 +496,28 @@
               "value": "${ServerId}"
             },
             {
-              "name": "instance",
-              "value": "${native.primary_nic.instance}"
-            },
-            {
-              "name": "objectname",
-              "value": "${native.primary_nic.objectname}"
-            }
-          ],
-          "group": "network",
-          "key": "network_sent",
-          "metricName": "win_net_bytes_sent",
-          "namespace": "InfraPulse/Lab",
-          "periodSeconds": 60,
-          "resourceId": "primary_nic",
-          "semantics": "rate",
-          "statistic": "Average",
-          "unit": "Bytes/Second"
-        },
-        {
-          "aggregation": [
-            "Average"
-          ],
-          "dimensions": [
-            {
-              "name": "EnrollmentId",
-              "value": "${EnrollmentId}"
-            },
-            {
-              "name": "ManagedNodeId",
-              "value": "${ManagedNodeId}"
-            },
-            {
-              "name": "ServerId",
-              "value": "${ServerId}"
-            },
-            {
-              "name": "instance",
-              "value": "${native.primary_nic.instance}"
-            },
-            {
-              "name": "objectname",
-              "value": "${native.primary_nic.objectname}"
+              "name": "collector",
+              "value": "${native.primary_nic.collector}"
             }
           ],
           "group": "network",
           "key": "network_received",
-          "metricName": "win_net_bytes_recv",
-          "namespace": "InfraPulse/Lab",
+          "metricName": "windows_net_bytes_received_total",
+          "namespace": "InfraPulse/AMP",
           "periodSeconds": 60,
           "resourceId": "primary_nic",
-          "semantics": "rate",
+          "semantics": "counter",
           "statistic": "Average",
-          "unit": "Bytes/Second"
+          "unit": "Bytes"
         }
       ],
       "parameter": {
         "name": "/infrapulse/lab-20261118/presets/windows",
-        "sha256": "9bcd326916d2818017290708acc93dc7579d72eabfb5a8b88e9583c0500a119a",
+        "sha256": "cc1dba636d143081a6d646c8f3446c72ee2ae02d718eeceab10916ae2624804d",
         "tier": "Standard",
-        "version": 1
+        "version": 2
       },
-      "revision": "11f3b4e54feb1324a03f32da86de5752a956c87bf50723da80d1e4b2e30bdd2b",
+      "revision": "dbc76853efc20805bd331b8e3af95b79407d0c835b0103c483c1ab75cd1f0b27",
       "ssm": {
         "sha256": "e216f63ef75822f6bec245d796db4a1da7c0a5985ec5f6881980ec9513075f25",
         "signer": {

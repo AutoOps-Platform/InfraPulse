@@ -39,6 +39,7 @@
 !deploy/scripts/build-ssm-documents.mjs
 !deploy/scripts/build-inputs.mjs
 !deploy/agent-release.json
+!observability/grafana/provisioning/datasources/amp.yml
 !observability/grafana/provisioning/datasources/cloudwatch.yml
 !observability/grafana/provisioning/dashboards/providers.yml
 !agents/ssm/templates/bootstrap.sh.tpl
