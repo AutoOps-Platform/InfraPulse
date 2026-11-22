@@ -1,9 +1,10 @@
 import { parseDashboardContext, parseOnboardingProgress } from './types';
-import type { AwsServer, Filters, MonitoringHealth, Page } from './types';
+import type { AwsServer, Filters, MonitoringHealth, Os, Page } from './types';
 
 export interface FleetRow {
   serverId: string;
   name: string;
+  platform: Os;
   environment: string;
   health: MonitoringHealth;
   lastSampleAt: string | null;
@@ -15,7 +16,7 @@ type ReadPage = (filters: Filters, signal?: AbortSignal) => Promise<Page<AwsServ
 type ReadServer = (serverId: string, signal?: AbortSignal) => Promise<AwsServer>;
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const nativeAtom = /^[A-Za-z0-9_ .:/()+-]{1,256}$/;
+const nativeAtom = /^[A-Za-z0-9_ .:/()+\-#\[\]]{1,256}$/;
 const hex = (value: string) => Array.from(value, c => c.charCodeAt(0).toString(16).padStart(2, '0')).join('');
 
 function checkAbort(signal?: AbortSignal) {
@@ -31,7 +32,7 @@ export function projectBinding(server: AwsServer): Binding | null {
       return null;
     }
     const binding = parseDashboardContext(server.dashboardContext, server, progress);
-    if (binding?.platform !== 'linux') {
+    if (!binding || (binding.platform !== 'linux' && binding.platform !== 'windows')) {
       return null;
     }
     const dimensions: Binding = { server_id: binding.serverId, managed_node_id: binding.nodeId, enrollment_id: binding.enrollmentId };
@@ -67,6 +68,7 @@ export async function listFleet(readPage: ReadPage, signal?: AbortSignal): Promi
       rows.set(server.id, {
         serverId: server.id,
         name: server.name,
+        platform: server.os,
         environment: server.environment,
         health: server.onboarding.monitoring.health,
         lastSampleAt: server.onboarding.monitoring.lastObservedSampleAt,
@@ -83,6 +85,19 @@ export async function listFleet(readPage: ReadPage, signal?: AbortSignal): Promi
     cursor = result.next_cursor;
   }
   return { rows: [...rows.values()], partial: true };
+}
+
+export function vmOptionsForQuery(
+  rows: readonly FleetRow[],
+  query: unknown,
+): Array<{ text: string; value: string }> | null {
+  if (query !== 'vm-options' && query !== 'vm-options linux' && query !== 'vm-options windows') {
+    return null;
+  }
+  const platform: Os | null = query === 'vm-options' ? null : (query.slice('vm-options '.length) as Os);
+  return rows
+    .filter((row) => platform === null || row.platform === platform)
+    .map(({ name, serverId }) => ({ text: `${name} (${serverId})`, value: serverId }));
 }
 
 export async function readBinding(readServer: ReadServer, serverId: string, signal?: AbortSignal): Promise<Binding | null> {

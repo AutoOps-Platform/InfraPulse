@@ -34,6 +34,8 @@ locals {
       INFRAPULSE_CONFIG_DOCUMENT_NAME       = local.config_document_name
       INFRAPULSE_DECOMMISSION_DOCUMENT_NAME = local.decommission_document_name
       INFRAPULSE_METRIC_NAMESPACE           = local.metric_namespace
+      INFRAPULSE_BOOTSTRAP_BUCKET           = aws_s3_bucket.bootstrap.id
+      INFRAPULSE_BOOTSTRAP_URL_TTL_SECONDS  = "1800"
       }, {
       for name, value in local.ecs_management_versions : name => value if value != null
     })
@@ -226,6 +228,7 @@ resource "aws_ecs_service" "service" {
     aws_volume_attachment.grafana,
     aws_iam_role_policy.ecs_execution,
     aws_iam_role_policy.central_runtime,
+    aws_iam_role_policy.management_bootstrap_s3,
     aws_iam_role_policy_attachment.ecs_metric_read,
   ]
 }

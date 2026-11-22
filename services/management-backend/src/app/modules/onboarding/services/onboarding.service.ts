@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Injectable, Optional } from '@nestjs/common';
 import { emptyAgent } from '../../../../integrations/aws/aws.port.js';
 import { ApiError } from '../../../common/errors.js';
@@ -7,7 +8,9 @@ import { ServersService } from '../../servers/services/servers.service.js';
 import type {
   BootstrapAttachment,
   BootstrapIntent,
+  BootstrapLink,
   OnboardingProgress,
+  Platform,
   RetryIntent,
 } from '../dto/onboarding.dto.js';
 import {
@@ -65,6 +68,7 @@ function validateIntent(serverId: string, intent: BootstrapIntent, retry = false
 export class OnboardingService {
   private readonly clock: Clock;
   private readonly assetsPort?: BootstrapAssetsPort;
+  private readonly bootstrapUrlTtlSeconds: number;
   private readonly decommissionPort?: DecommissionIntentPort;
 
   constructor(
@@ -76,6 +80,7 @@ export class OnboardingService {
   ) {
     this.clock = runtime?.clock ?? systemClock;
     this.assetsPort = runtime?.bootstrapAssets;
+    this.bootstrapUrlTtlSeconds = runtime?.bootstrapUrlTtlSeconds ?? 1800;
     this.decommissionPort = decommission;
   }
 
@@ -148,11 +153,15 @@ export class OnboardingService {
     }
   }
 
-  async bootstrap(
+  private async prepareBootstrap(
     serverId: string,
     intent: BootstrapIntent,
     actor: VerifiedActor,
-  ): Promise<BootstrapAttachment> {
+  ): Promise<{
+    attempt: AttemptSnapshot;
+    activation: { id: string; expiresAt: Date };
+    attachment: BootstrapAttachment;
+  }> {
     validateIntent(serverId, intent);
     const identity = requireAdmin(actor);
     const assets = await this.loadQualifiedAssets(serverId);
@@ -235,37 +244,111 @@ export class OnboardingService {
       throw new ApiError('provisioning_not_ready');
     }
 
+    return {
+      attempt,
+      activation: { id: result.id, expiresAt: result.expiresAt },
+      attachment,
+    };
+  }
+
+  private async commitActivation(
+    attempt: AttemptSnapshot,
+    activation: { id: string; expiresAt: Date },
+  ): Promise<void> {
     const transition = decide(
       attempt,
       {
         kind: 'ActivationFound',
         generation: attempt.generation,
         enrollmentId: attempt.enrollmentId,
-        activationId: result.id,
-        expiresAt: result.expiresAt,
+        activationId: activation.id,
+        expiresAt: activation.expiresAt,
       },
       this.clock.now(),
     );
+    if (
+      transition.kind !== 'Apply' ||
+      transition.stage !== 'AwaitingRegistration' ||
+      (await this.store.commitTransition(
+        attempt.id,
+        attempt.generation,
+        attempt.leaseVersion,
+        transition,
+      )) !== 'Applied'
+    ) {
+      throw new ApiError('conflict');
+    }
+  }
 
+  private formatInstallCommand(platform: Platform, url: string): string {
+    if (/[\s'"]/.test(url)) throw new ApiError('provisioning_not_ready');
+    return platform === 'linux'
+      ? `f=$(mktemp) && chmod 600 "$f" && curl -fsSL '${url}' -o "$f" && sudo bash "$f"; rm -f "$f"`
+      : `$f = Join-Path $env:TEMP "ip-bootstrap-$([guid]::NewGuid()).ps1"; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -UseBasicParsing -Uri '${url}' -OutFile $f; try { powershell -NoProfile -ExecutionPolicy Bypass -File $f } finally { Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue }`;
+  }
+
+  async bootstrap(
+    serverId: string,
+    intent: BootstrapIntent,
+    actor: VerifiedActor,
+  ): Promise<BootstrapAttachment> {
+    const { attempt, activation, attachment } = await this.prepareBootstrap(serverId, intent, actor);
     try {
-      if (
-        transition.kind !== 'Apply' ||
-        transition.stage !== 'AwaitingRegistration' ||
-        (await this.store.commitTransition(
-          attempt.id,
-          attempt.generation,
-          attempt.leaseVersion,
-          transition,
-        )) !== 'Applied'
-      ) {
-        throw new ApiError('conflict');
-      }
+      await this.commitActivation(attempt, activation);
     } catch (error) {
       attachment.bytes.fill(0);
       throw error instanceof ApiError ? error : new ApiError('dependency_unavailable');
     }
-
     return attachment;
+  }
+
+  async bootstrapLink(
+    serverId: string,
+    intent: BootstrapIntent,
+    actor: VerifiedActor,
+  ): Promise<BootstrapLink> {
+    const { attempt, activation, attachment } = await this.prepareBootstrap(serverId, intent, actor);
+    const ext = attempt.platform === 'linux' ? 'sh' : 'ps1';
+    const key = `bootstrap/${serverId}/${attempt.id}/${randomUUID()}.${ext}`;
+    let publishedUrl: string;
+    let publishedExpiresAt: Date;
+
+    try {
+      const published = await this.worker.publishBootstrapArtifact({
+        key,
+        body: attachment.bytes,
+        contentType: attachment.contentType,
+        expiresInSeconds: this.bootstrapUrlTtlSeconds,
+      });
+      if (published.kind !== 'Known') {
+        await this.reconcile(
+          attempt,
+          published.kind === 'Denied' ? 'permission_denied' : 'activation_unavailable',
+        );
+        throw new ApiError('provisioning_not_ready');
+      }
+      publishedUrl = published.url;
+      publishedExpiresAt = published.expiresAt;
+    } finally {
+      attachment.bytes.fill(0);
+    }
+
+    try {
+      await this.commitActivation(attempt, activation);
+    } catch (error) {
+      await this.worker.deleteBootstrapArtifact(key).catch(() => undefined);
+      throw error instanceof ApiError ? error : new ApiError('dependency_unavailable');
+    }
+
+    return {
+      serverId,
+      attemptId: attempt.id,
+      generation: attempt.generation,
+      platform: attempt.platform,
+      url: publishedUrl,
+      expiresAt: publishedExpiresAt.toISOString(),
+      command: this.formatInstallCommand(attempt.platform, publishedUrl),
+    };
   }
 
   private async reconcile(

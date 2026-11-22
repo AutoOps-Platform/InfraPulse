@@ -27,6 +27,7 @@ export interface ProtectedOnboardingRuntime {
   command: CommandFactory;
   presetMatches: PresetMatcher;
   bootstrapAssets?: BootstrapAssetsPort;
+  bootstrapUrlTtlSeconds?: number;
   clock?: Clock;
   scheduler?: Scheduler;
   jitter?: () => number;

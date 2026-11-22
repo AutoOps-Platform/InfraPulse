@@ -23,12 +23,13 @@ const windows = JSON.stringify({ uid: 'infrapulse-windows-host', title: 'VM Deta
 const fleetName = 'dashboards/fleet.json';
 const fleet = JSON.stringify({ uid: 'infrapulse-fleet', title: 'Fleet' });
 
-test('plans both canonical JSON dashboards at owned keys, not the manifest', async () => {
+test('plans all canonical JSON dashboards at owned live keys, not the manifest', async () => {
   const { planDashboardPublish } = await import(script.href);
   const files = await loadCompiledCloudWatchDashboards();
   assert.deepEqual(planDashboardPublish(target, files), [
-    [fleetName, 'grafana/dashboards/fleet.json', 'infrapulse-fleet'],
-    [linuxName, 'grafana/dashboards/linux-host.json', 'infrapulse-linux-host'],
+    [fleetName, 'grafana/dashboards/live/fleet.json', 'infrapulse-fleet'],
+    [linuxName, 'grafana/dashboards/live/linux-host.json', 'infrapulse-linux-host'],
+    [windowsName, 'grafana/dashboards/live/windows-host.json', 'infrapulse-windows-host'],
   ].map(([name, key, uid]) => ({
     bucket: 'infrapulse-lab-123-dash-123456789012', key, accountId: '123456789012',
     region: 'ap-southeast-1', uid, body: files[name],
@@ -49,7 +50,7 @@ test('rejects empty, unexpected, oversized, malformed, or conflicting artifacts 
   for (const files of [{}, { 'manifest.json': '{}' }, { [linuxName]: linux, 'dashboards/extra.json': linux },
     { [linuxName]: ' '.repeat(2 * 1024 * 1024 + 1) }, { [linuxName]: '{' }, { [linuxName]: '[]' },
     { [linuxName]: JSON.stringify({ uid: 'infrapulse-linux-host', title: '  ' }) },
-    { [linuxName]: windows }, { [linuxName]: linux }, { [fleetName]: fleet, [windowsName]: windows }]) {
+    { [linuxName]: windows }, { [linuxName]: linux }]) {
     assert.throws(() => planDashboardPublish(target, files), /DASHBOARD_(ARTIFACT_INVALID|ARTIFACTS_EMPTY)/);
   }
 });
@@ -68,8 +69,9 @@ test('CLI dry run compiles locally and reports only public target metadata', asy
     ok: true, dryRun: true,
     destination: { bucket: target.bucket, prefix: target.prefix, region: target.region, accountId: target.account_id },
     dashboards: [
-      { key: 'grafana/dashboards/fleet.json', uid: 'infrapulse-fleet' },
-      { key: 'grafana/dashboards/linux-host.json', uid: 'infrapulse-linux-host' },
+      { key: 'grafana/dashboards/live/fleet.json', uid: 'infrapulse-fleet' },
+      { key: 'grafana/dashboards/live/linux-host.json', uid: 'infrapulse-linux-host' },
+      { key: 'grafana/dashboards/live/windows-host.json', uid: 'infrapulse-windows-host' },
     ],
   });
   for (const content of [JSON.stringify({ ...target, token: 'do-not-echo-this' }), ' '.repeat(4097),
@@ -94,12 +96,12 @@ test('publish puts exact bodies with expected owner and stops on the first failu
     return calls.length === 1;
   });
   assert.deepEqual(calls, [
-    ['s3api', 'put-object', '--bucket', target.bucket, '--key', 'grafana/dashboards/fleet.json',
+    ['s3api', 'put-object', '--bucket', target.bucket, '--key', 'grafana/dashboards/live/fleet.json',
       '--expected-bucket-owner', '123456789012', '--region', 'ap-southeast-1', '--content-type', 'application/json', '--body'],
-    ['s3api', 'put-object', '--bucket', target.bucket, '--key', 'grafana/dashboards/linux-host.json',
+    ['s3api', 'put-object', '--bucket', target.bucket, '--key', 'grafana/dashboards/live/linux-host.json',
       '--expected-bucket-owner', '123456789012', '--region', 'ap-southeast-1', '--content-type', 'application/json', '--body'],
   ]);
-  assert.deepEqual(failure, { ok: false, code: 'DASHBOARD_UPLOAD_UNCONFIRMED', confirmed: 1, total: 2 });
+  assert.deepEqual(failure, { ok: false, code: 'DASHBOARD_UPLOAD_UNCONFIRMED', confirmed: 1, total: 3 });
   for (const path of paths) await assert.rejects(stat(path), { code: 'ENOENT' });
 });
 
@@ -108,7 +110,7 @@ test('no upload runs when any file or the target fails validation', async () => 
   let calls = 0;
   const run = async () => { calls++; return true; };
   await assert.rejects(publishDashboards({ ...target, bucket: 'bad-bucket' }, { [linuxName]: linux }, run), /DASHBOARD_TARGET_INVALID/);
-  await assert.rejects(publishDashboards(target, { [fleetName]: fleet, [windowsName]: windows }, run), /DASHBOARD_ARTIFACT_INVALID/);
+  await assert.rejects(publishDashboards(target, { [windowsName]: windows }, run), /DASHBOARD_ARTIFACT_INVALID/);
   await assert.rejects(publishDashboards(target, {}, run), /DASHBOARD_ARTIFACTS_EMPTY/);
   const ambiguous = `{"uid":"wrong",${linux.slice(1)}`;
   await assert.rejects(publishDashboards(target, { [linuxName]: ambiguous }, run), /DASHBOARD_ARTIFACT_INVALID/);

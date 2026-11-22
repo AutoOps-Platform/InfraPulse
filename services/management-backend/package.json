@@ -28,8 +28,10 @@
   },
   "dependencies": {
     "@aws-sdk/client-cloudwatch": "3.1171.0",
+    "@aws-sdk/client-s3": "^3.1175.0",
     "@aws-sdk/client-ssm": "3.1171.0",
     "@aws-sdk/credential-provider-http": "3.972.86",
+    "@aws-sdk/s3-request-presigner": "^3.1175.0",
     "@nestjs/common": "12.3.2",
     "@nestjs/core": "12.3.2",
     "@nestjs/platform-express": "12.3.2",

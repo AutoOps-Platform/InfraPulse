@@ -215,6 +215,17 @@ export type MetricReadResult =
   | { kind: 'Partial'; series: MetricSeries[]; code: AwsErrorCode }
   | { kind: 'Unavailable'; code: AwsErrorCode };
 
+export interface BootstrapArtifactInput {
+  key: string;
+  body: Buffer;
+  contentType: 'text/x-shellscript' | 'text/plain';
+  expiresInSeconds: number;
+}
+
+export type PublishBootstrapArtifactResult =
+  | { kind: 'Known'; url: string; expiresAt: Date }
+  | { kind: 'Denied' | 'Error'; code: AwsErrorCode };
+
 export interface AwsPort extends AgentCommandPort {
   readonly createActivation: (
     intent: ActivationIntent,
@@ -245,6 +256,11 @@ export interface AwsPort extends AgentCommandPort {
     >,
     signal: AbortSignal,
   ) => Promise<MutationResult>;
+  readonly publishBootstrapArtifact: (
+    input: BootstrapArtifactInput,
+    signal: AbortSignal,
+  ) => Promise<PublishBootstrapArtifactResult>;
+  readonly deleteBootstrapArtifact: (key: string, signal: AbortSignal) => Promise<MutationResult>;
 }
 
 export const terminalCommand = (o: CommandObservation | null): boolean =>

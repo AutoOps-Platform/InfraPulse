@@ -9,7 +9,7 @@ const hook = registerHooks({
     return next(context.parentURL === inventoryUrl && specifier === './types' ? './types.ts' : specifier, context);
   },
 });
-const { listFleet, readBinding } = await import(inventoryUrl).finally(() => hook.deregister());
+const { listFleet, readBinding, vmOptionsForQuery } = await import(inventoryUrl).finally(() => hook.deregister());
 const a = '11111111-1111-4111-8111-111111111111';
 const b = '22222222-2222-4222-8222-222222222222';
 const enrollmentId = '42424242-4242-4242-8242-424242424242';
@@ -47,8 +47,8 @@ test('fleet keeps identical names as separate VM ids and includes a VM without m
   });
   assert.deepEqual(request, [{ archive: 'false', limit: 100, cursor: undefined }, { archive: 'false', limit: 100, cursor: 'next' }]);
   assert.deepEqual(result, { partial: false, rows: [
-    { serverId: a, name: 'same name', environment: 'lab', health: 'Fresh', lastSampleAt: sample, canOpenMetrics: true },
-    { serverId: b, name: 'same name', environment: 'lab', health: 'Unknown', lastSampleAt: null, canOpenMetrics: false },
+    { serverId: a, name: 'same name', platform: 'linux', environment: 'lab', health: 'Fresh', lastSampleAt: sample, canOpenMetrics: true },
+    { serverId: b, name: 'same name', platform: 'linux', environment: 'lab', health: 'Unknown', lastSampleAt: null, canOpenMetrics: false },
   ] });
 });
 
@@ -95,7 +95,7 @@ test('binding projects an exact tuple from a fresh GET on every read', async () 
   assert.equal(calls, 2);
 });
 
-test('binding rejects unexpected server, expired generation, unbound, retired, archived and unavailable Windows', async () => {
+test('binding rejects unexpected server, expired generation, unbound, retired, archived and unavailable release', async () => {
   for (const mutate of [
     (v) => { v.id = b; },
     (v) => { v.onboarding.generation++; },
@@ -103,11 +103,17 @@ test('binding rejects unexpected server, expired generation, unbound, retired, a
     (v) => { v.onboarding.bindingState = 'Retired'; },
     (v) => { v.archived_at = sample; },
     (v) => { v.onboarding.availability = { available: false, reason: 'release_missing', configurationVersion: null }; },
-    (v) => { v.os = v.dashboardContext.platform = 'windows'; },
   ]) {
     const current = vm(); mutate(current);
     assert.equal(await readBinding(async () => current, a), null, String(mutate));
   }
+  const win = vm();
+  win.os = win.dashboardContext.platform = 'windows';
+  win.dashboardContext.resources = [
+    { id: 'cpu_total', dimensions: [{ name: 'instance', value: '_Total' }, { name: 'objectname', value: 'Processor' }] },
+    { id: 'primary_nic', dimensions: [{ name: 'instance', value: 'Microsoft Hyper-V Network Adapter #2' }, { name: 'objectname', value: 'Network Interface' }] },
+  ];
+  assert.ok(await readBinding(async () => win, a));
   assert.equal(await readBinding(async () => assert.fail('invalid selection must not perform I/O'), '*'), null);
 });
 
@@ -130,4 +136,18 @@ test('lookup failure never reuses a successful tuple, and a cancelled response c
     return vm();
   }, a, controller.signal), { name: 'AbortError' });
   await assert.rejects(listFleet(async () => assert.fail('cancelled scan must not perform I/O'), controller.signal), { name: 'AbortError' });
+});
+
+test('vmOptionsForQuery filters VM dropdown options by OS platform', () => {
+  const rows = [
+    { serverId: a, name: 'linux-vm', platform: 'linux', environment: 'lab', health: 'Fresh', lastSampleAt: sample, canOpenMetrics: true },
+    { serverId: b, name: 'win-vm', platform: 'windows', environment: 'lab', health: 'Fresh', lastSampleAt: sample, canOpenMetrics: true },
+  ];
+  assert.deepEqual(vmOptionsForQuery(rows, 'vm-options linux'), [{ text: `linux-vm (${a})`, value: a }]);
+  assert.deepEqual(vmOptionsForQuery(rows, 'vm-options windows'), [{ text: `win-vm (${b})`, value: b }]);
+  assert.deepEqual(vmOptionsForQuery(rows, 'vm-options'), [
+    { text: `linux-vm (${a})`, value: a },
+    { text: `win-vm (${b})`, value: b },
+  ]);
+  assert.equal(vmOptionsForQuery(rows, 'vm-options darwin'), null);
 });

@@ -35,6 +35,7 @@ export async function createManagementApp(
           region: qualified.config.region,
           verifier: new MetricVerifier(qualified.aws, qualified.manifest),
           bootstrapAssets: qualified.assets,
+          bootstrapUrlTtlSeconds: qualified.config.bootstrapUrlTtlSeconds,
           command: qualified.command,
           presetMatches: qualified.presetMatches,
         }

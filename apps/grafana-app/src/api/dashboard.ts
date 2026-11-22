@@ -11,5 +11,5 @@ export function buildRuleUrl(uid: string): string | undefined {
 // The link identifies a VM, not a binding. The dashboard re-reads the
 // current authorized binding and never treats URL dimensions as proof.
 export function buildDashboardUrl(server: AwsServer): string | undefined {
-  return projectBinding(server) ? vmMetricsHref(server.id) : undefined;
+  return projectBinding(server) ? vmMetricsHref(server.id, server.os) : undefined;
 }

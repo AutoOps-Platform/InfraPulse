@@ -105,6 +105,9 @@ func (a *App) CallResource(ctx context.Context, req *backend.CallResourceRequest
 		}
 		return sender.Send(response)
 	}
+	if req.Method == "POST" && bootstrapLinkPath.MatchString(target) && len(req.Body) == 0 {
+		return failure(sender, 400, "invalid_request")
+	}
 	status, data, err := a.management(ctx, actor, req.Method, target, req.Body, "")
 	if err != nil {
 		return failure(sender, 503, "management_unavailable")
@@ -134,6 +137,9 @@ func (a *App) management(ctx context.Context, actor Identity, method, target str
 	out, err := http.NewRequestWithContext(ctx, method, a.cfg.ManagementURL.String()+target, bytes.NewReader(body))
 	if err != nil {
 		return 0, nil, errors.New("management_unavailable")
+	}
+	if method == "POST" && bootstrapLinkPath.MatchString(target) {
+		out.GetBody = nil
 	}
 	// Retained parameter shape for archival callers; Agent keys are never sent.
 	if agentKey != "" {

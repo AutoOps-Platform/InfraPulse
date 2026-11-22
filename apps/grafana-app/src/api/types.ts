@@ -66,6 +66,15 @@ export type MonitoringHealth = 'Fresh' | 'Stale' | 'Offline' | 'Unknown';
 export type BindingState = 'Active' | 'Decommissioning' | 'CleanupRequired' | 'Retired';
 export type AlertSyncState = 'Pending' | 'Synced' | 'Error';
 export interface BootstrapIntent { requestId: string }
+export interface BootstrapLink {
+  serverId: string;
+  attemptId: string;
+  generation: number;
+  platform: Os;
+  url: string;
+  expiresAt: string;
+  command: string;
+}
 export interface RetryIntent extends BootstrapIntent { mode: 'retry-config' | 'regenerate-unused' }
 export interface AgentMetadata {
   nodeId: string | null;
@@ -191,4 +200,58 @@ export function parseOnboardingProgress(value: unknown): OnboardingProgress {
   ) throw new Error('Invalid onboarding progress');
   // The closed JSON value has no extension bags or arbitrary error/stage text.
   return JSON.parse(JSON.stringify(value)) as OnboardingProgress;
+}
+
+export function parseBootstrapLink(value: unknown, serverId: string): BootstrapLink {
+  if (!closedObject(value, ['serverId', 'attemptId', 'generation', 'platform', 'url', 'expiresAt', 'command'])) {
+    throw new Error('Invalid bootstrap link');
+  }
+  const attemptId = value.attemptId;
+  const generation = value.generation;
+  const expiresAt = value.expiresAt;
+  if (
+    !progressUuid(value.serverId) ||
+    value.serverId !== serverId ||
+    typeof attemptId !== 'string' ||
+    !progressUuid(attemptId) ||
+    typeof generation !== 'number' ||
+    !integer(generation) ||
+    generation < 1 ||
+    (value.platform !== 'linux' && value.platform !== 'windows') ||
+    typeof value.url !== 'string' ||
+    value.url.length === 0 ||
+    value.url.length > 4096 ||
+    /[\s'"]/.test(value.url) ||
+    typeof expiresAt !== 'string' ||
+    !timestamp(expiresAt) ||
+    typeof value.command !== 'string' ||
+    value.command.length === 0 ||
+    value.command.length > 4500 ||
+    /[\r\n]/.test(value.command) ||
+    !value.command.includes(value.url)
+  ) {
+    throw new Error('Invalid bootstrap link');
+  }
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(value.url);
+  } catch {
+    throw new Error('Invalid bootstrap link');
+  }
+  if (
+    parsedUrl.protocol !== 'https:' ||
+    !/^infrapulse-[a-z0-9-]+-bootstrap-\d{12}\.s3\.ap-southeast-1\.amazonaws\.com$/.test(parsedUrl.hostname) ||
+    !parsedUrl.pathname.startsWith(`/bootstrap/${serverId}/${attemptId}/`)
+  ) {
+    throw new Error('Invalid bootstrap link');
+  }
+  return {
+    serverId: value.serverId,
+    attemptId,
+    generation,
+    platform: value.platform,
+    url: value.url,
+    expiresAt,
+    command: value.command,
+  };
 }

@@ -51,20 +51,28 @@ function fleetDashboard(source) {
   ]);
 }
 
-function detailDashboard(source, linux) {
-  const probes = [
-    ['cpu_busy', 'cpu', 'cpu', 'usage_active', 'CPU'],
-    ['memory_used', 'memory', 'mem', 'used_percent', 'RAM'],
-    ['disk_used', 'disk', 'disk', 'used_percent', 'Root filesystem'],
-    ['network_received', 'network', 'net', 'bytes_recv', 'RX'],
-    ['network_sent', 'network', 'net', 'bytes_sent', 'TX'],
-  ];
+function detailDashboard(source, targetRelease, platform = 'linux') {
+  const probes = platform === 'windows'
+    ? [
+        ['cpu_busy', 'cpu', 'Processor', '% Processor Time', 'CPU'],
+        ['memory_used', 'memory', 'Memory', '% Committed Bytes In Use', 'RAM'],
+        ['disk_free', 'disk', 'LogicalDisk', '% Free Space', 'Ổ đĩa C: (Trống)'],
+        ['network_received', 'network', 'Network Interface', 'Bytes Received/sec', 'RX'],
+        ['network_sent', 'network', 'Network Interface', 'Bytes Sent/sec', 'TX'],
+      ]
+    : [
+        ['cpu_busy', 'cpu', 'cpu', 'usage_active', 'CPU'],
+        ['memory_used', 'memory', 'mem', 'used_percent', 'RAM'],
+        ['disk_used', 'disk', 'disk', 'used_percent', 'Root filesystem'],
+        ['network_received', 'network', 'net', 'bytes_recv', 'RX'],
+        ['network_sent', 'network', 'net', 'bytes_sent', 'TX'],
+      ];
   const native = new Set();
   const manifest = [];
   const targets = probes.map(([key, group, pluginName, input, label], idx) => {
-    const metric = linux.metrics.find(m => m.key === key);
+    const metric = targetRelease.metrics.find(m => m.key === key);
     const percent = group !== 'network';
-    const matches = linux.configuration.plugins.flatMap(p => p.measurements
+    const matches = targetRelease.configuration.plugins.flatMap(p => p.measurements
       .filter(m => m.metricKeys.includes(key)).map(m => ({ plugin: p.plugin, input: m.input })));
     if (!metric || metric.group !== group || metric.unit !== (percent ? 'Percent' : 'Bytes/Second')
       || matches.length !== 1 || matches[0].plugin !== pluginName || matches[0].input !== input) fail('DASHBOARD_SEMANTICS_UNSUPPORTED');
@@ -82,8 +90,9 @@ function detailDashboard(source, linux) {
       dimensions, matchExact: true, period: String(metric.periodSeconds), statistic: metric.statistic, label, hide: false };
   });
   if (!native.size) fail('DASHBOARD_SEMANTICS_UNSUPPORTED');
-  const config = (percent, noValue, custom) => ({ defaults: { unit: percent ? 'percent' : 'none', noValue,
-    ...(percent ? { min: 0, max: 100 } : {}), ...(custom ? { custom } : {}) }, overrides: [] });
+  const config = (percent, noValue, custom, thresholds) => ({ defaults: { unit: percent ? 'percent' : 'none', noValue,
+    ...(percent ? { min: 0, max: 100 } : {}), ...(thresholds ? { thresholds } : {}), ...(custom ? { custom } : {}) }, overrides: [] });
+  const freePercentThresholds = { mode: 'absolute', steps: [{ color: 'red', value: null }, { color: 'orange', value: 15 }, { color: 'green', value: 30 }] };
   const trimToRecent = { id: 'filterByValue', options: { type: 'include', match: 'all', filters: [
     { fieldName: 'Time', config: { id: 'greaterOrEqual', options: { value: binding('recent_after_ms') } } },
     { fieldName: 'Time', config: { id: 'lowerOrEqual', options: { value: binding('recent_through_ms') } } },
@@ -91,7 +100,7 @@ function detailDashboard(source, linux) {
   const latest = targets.slice(0, 3).map((target, i) => ({ id: i + 1, title: `${target.label} · Mẫu mới`, type: 'stat', datasource: CW,
     description: 'Chỉ hiển thị mẫu trong 5 phút gần nhất; không coi dữ liệu cũ hoặc thiếu là 0.',
     gridPos: { x: i * 8, y: 0, w: 8, h: 5 }, targets: [target], transformations: [trimToRecent],
-    fieldConfig: config(true, 'No recent sample'),
+    fieldConfig: config(true, 'No recent sample', undefined, probes[i][0] === 'disk_free' ? freePercentThresholds : undefined),
     options: { reduceOptions: { calcs: ['lastNotNull'], fields: '', values: false }, graphMode: 'none', textMode: 'value' } }));
   const networkNotice = 'Đọc metric/statistic đúng release. Đơn vị Bytes/Second chưa xác minh độc lập; không quy đổi hay gắn nhãn B/s.';
   const series = [...targets.slice(0, 3).map(t => [t]), targets.slice(3)].map((group, i) => ({ id: i + 4,
@@ -102,7 +111,7 @@ function detailDashboard(source, linux) {
     options: { legend: { displayMode: 'list', placement: 'bottom', calcs: [] }, tooltip: { mode: 'multi' } } }));
   const query = (name, value, hide, refresh, skipUrlSync, label = name) => ({ name, label, type: 'query', datasource: INVENTORY,
     query: value, definition: value, hide, refresh, skipUrlSync, options: [], multi: false, includeAll: false });
-  const variables = [query('server_id', 'vm-options', 0, 1, false, 'VM'),
+  const variables = [query('server_id', `vm-options ${platform}`, 0, 1, false, 'VM'),
     query('binding', `binding $server_id ${[...native].sort().join(',')}`, 2, 2, true)];
   return { result: dashboard(source, [...latest, ...series], variables), metrics: manifest };
 }
@@ -117,12 +126,20 @@ export function compileCloudWatchDashboards(value, templates) {
   const linux = release.platforms.linux;
   if (linux) {
     const detailSource = template(templates?.linux, 'infrapulse-linux-host', 'infrapulse-cloudwatch-template-v2', 'linux');
-    const { result, metrics } = detailDashboard(detailSource, linux);
+    const { result, metrics } = detailDashboard(detailSource, linux, 'linux');
     files['dashboards/linux-host.json'] = encode(result);
     entries.push({ platform: 'linux', uid: result.uid, presetId: 'linux', presetVersion: linux.parameter.version,
       presetHash: linux.parameter.sha256, templateHash: releaseSha256(detailSource), dashboardHash: releaseSha256(result), metrics });
   }
-  if (entries.some(({ uid }) => Buffer.byteLength(files[uid === fleet.uid ? 'dashboards/fleet.json' : 'dashboards/linux-host.json']) > 2097152)) fail('DASHBOARD_TOO_LARGE');
+  const windows = release.platforms.windows;
+  if (windows) {
+    const detailSource = template(templates?.windows, 'infrapulse-windows-host', 'infrapulse-cloudwatch-template-v2', 'windows');
+    const { result, metrics } = detailDashboard(detailSource, windows, 'windows');
+    files['dashboards/windows-host.json'] = encode(result);
+    entries.push({ platform: 'windows', uid: result.uid, presetId: 'windows', presetVersion: windows.parameter.version,
+      presetHash: windows.parameter.sha256, templateHash: releaseSha256(detailSource), dashboardHash: releaseSha256(result), metrics });
+  }
+  if (Object.entries(files).some(([, content]) => Buffer.byteLength(content) > 2097152)) fail('DASHBOARD_TOO_LARGE');
   files['manifest.json'] = encode({ format: 'infrapulse-cloudwatch-generation-v2', releaseHash: releaseSha256(release), entries });
   return files;
 }
@@ -132,6 +149,7 @@ export async function loadCompiledCloudWatchDashboards() {
   const release = await readBuildRelease();
   const templates = { fleet: await readPublicJson(INPUT + 'fleet.json') };
   if (release.platforms.linux) templates.linux = await readPublicJson(INPUT + 'linux-host.json');
+  if (release.platforms.windows) templates.windows = await readPublicJson(INPUT + 'windows-host.json');
   return compileCloudWatchDashboards(release, templates);
 }
 

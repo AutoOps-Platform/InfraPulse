@@ -9,6 +9,7 @@ import (
 
 var uuidSegment = `[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`
 var bootstrapAttachmentPath = regexp.MustCompile(`^/api/v1/servers/(` + uuidSegment + `)/onboarding/bootstrap$`)
+var bootstrapLinkPath = regexp.MustCompile(`^/api/v1/servers/(` + uuidSegment + `)/onboarding/bootstrap-link$`)
 
 type allowedRoute struct {
 	method string
@@ -33,6 +34,7 @@ var managementRoutes = []allowedRoute{
 	route("GET", `/api/v1/servers/`+uuidSegment), route("PATCH", `/api/v1/servers/`+uuidSegment), route("DELETE", `/api/v1/servers/`+uuidSegment),
 	route("GET", `/api/v1/servers/`+uuidSegment+`/onboarding`),
 	route("POST", `/api/v1/servers/`+uuidSegment+`/onboarding/bootstrap`),
+	route("POST", `/api/v1/servers/`+uuidSegment+`/onboarding/bootstrap-link`),
 	route("POST", `/api/v1/servers/`+uuidSegment+`/onboarding/retry`),
 	route("POST", `/api/v1/servers/`+uuidSegment+`/decommission`),
 }
@@ -50,9 +52,9 @@ func managementTarget(method, rawURL, resourcePath string) (string, error) {
 	if path != "/"+strings.TrimPrefix(resourcePath, "/") || strings.Contains(path, "//") || strings.Contains(path, "..") {
 		return "", bad
 	}
-	// The one-shot binary endpoint has no query contract, including an empty
-	// delimiter or ignored separators that could bypass exact attachment dispatch.
-	if bootstrapAttachmentPath.MatchString(path) && (u.ForceQuery || u.RawQuery != "") {
+	// The one-shot bootstrap endpoints have no query contract, including an empty
+	// delimiter or ignored separators that could bypass exact dispatch.
+	if (bootstrapAttachmentPath.MatchString(path) || bootstrapLinkPath.MatchString(path)) && (u.ForceQuery || u.RawQuery != "") {
 		return "", bad
 	}
 	q, err := url.ParseQuery(u.RawQuery)

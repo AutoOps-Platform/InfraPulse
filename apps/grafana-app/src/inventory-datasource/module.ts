@@ -2,7 +2,7 @@ import { DataSourceApi, DataSourcePlugin, FieldType } from '@grafana/data';
 import type { DataQuery, DataQueryRequest, DataQueryResponse, LegacyMetricFindQueryOptions, MetricFindValue } from '@grafana/data';
 import { getTemplateSrv } from '@grafana/runtime';
 import { api } from '../api/client';
-import { listFleet, readBinding } from '../api/inventory';
+import { listFleet, readBinding, vmOptionsForQuery } from '../api/inventory';
 import { vmMetricsHref, vmsHref } from '../api/vm-routes';
 
 interface InventoryQuery extends DataQuery {
@@ -17,9 +17,9 @@ const noMatch = 'no-match'; // Cannot be an Inventory UUID or a managed-node ID.
 
 class InventoryDataSource extends DataSourceApi<InventoryQuery> {
   async metricFindQuery(query: unknown, options?: LegacyMetricFindQueryOptions): Promise<MetricFindValue[]> {
-    if (query === 'vm-options') {
+    if (query === 'vm-options' || query === 'vm-options linux' || query === 'vm-options windows') {
       const { rows } = await listFleet(api.servers);
-      return rows.map(({ name, serverId }) => ({ text: `${name} (${serverId})`, value: serverId }));
+      return vmOptionsForQuery(rows, query) ?? [];
     }
     const prefix = 'binding $server_id ';
     if (typeof query !== 'string' || query.length > 32768 || !query.startsWith(prefix)) {
@@ -63,7 +63,7 @@ class InventoryDataSource extends DataSourceApi<InventoryQuery> {
           { name: 'VM ID', type: FieldType.string, values: rows.map((row) => row.serverId) },
           { name: 'Open', type: FieldType.string, values: rows.map((row) => row.canOpenMetrics ? 'Metrics' : 'Setup') },
           { name: 'Path', type: FieldType.string, values: rows.map((row) => row.canOpenMetrics
-            ? vmMetricsHref(row.serverId) : vmsHref(row.serverId)) },
+            ? vmMetricsHref(row.serverId, row.platform) : vmsHref(row.serverId)) },
         ],
       });
     // Scenes only applies overrides to fields that carry a FieldConfig object.

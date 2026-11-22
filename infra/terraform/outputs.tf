@@ -94,6 +94,11 @@ output "grafana_dashboard_publish" {
   } : null
 }
 
+output "bootstrap_bucket_name" {
+  description = "Private ephemeral S3 bucket for one-time presigned bootstrap scripts (auto-expired via S3 Lifecycle)."
+  value       = aws_s3_bucket.bootstrap.id
+}
+
 output "native_qualification_status" {
   description = "No document/preset/native qualification or effective-IAM evidence exists in I2."
   value       = "NOT RUN"

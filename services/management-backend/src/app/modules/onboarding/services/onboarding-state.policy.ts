@@ -58,6 +58,7 @@ export class OnboardingRuntime {
   readonly command: CommandFactory;
   readonly presetMatches: PresetMatcher;
   readonly bootstrapAssets?: BootstrapAssetsPort;
+  readonly bootstrapUrlTtlSeconds: number;
   readonly clock: Clock;
   readonly scheduler: Scheduler;
   readonly jitter?: () => number;
@@ -69,6 +70,7 @@ export class OnboardingRuntime {
     command: CommandFactory;
     presetMatches?: PresetMatcher;
     bootstrapAssets?: BootstrapAssetsPort;
+    bootstrapUrlTtlSeconds?: number;
     clock?: Clock;
     scheduler?: Scheduler;
     jitter?: () => number;
@@ -79,6 +81,7 @@ export class OnboardingRuntime {
     this.command = init.command;
     this.presetMatches = init.presetMatches ?? (() => false);
     this.bootstrapAssets = init.bootstrapAssets;
+    this.bootstrapUrlTtlSeconds = init.bootstrapUrlTtlSeconds ?? 1800;
     this.clock = init.clock ?? systemClock;
     this.scheduler = init.scheduler ?? timeoutScheduler;
     this.jitter = init.jitter;

@@ -15,6 +15,7 @@ const MAX_DASHBOARD_BYTES = 2 * 1024 * 1024;
 const ARTIFACTS = new Map([
   ['dashboards/fleet.json', 'infrapulse-fleet'],
   ['dashboards/linux-host.json', 'infrapulse-linux-host'],
+  ['dashboards/windows-host.json', 'infrapulse-windows-host'],
 ]);
 const fail = (code) => { throw new Error(code); };
 const object = (value) => value !== null && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype;

@@ -126,6 +126,18 @@ export type BootstrapAttachment =
       filename: `infrapulse-${string}.ps1`;
     };
 
+export interface BootstrapLinkDto {
+  serverId: string;
+  attemptId: string;
+  generation: number;
+  platform: Platform;
+  url: string;
+  expiresAt: string;
+  command: string;
+}
+
+export type BootstrapLink = BootstrapLinkDto;
+
 export function pendingOnboardingProgress(serverId: string): OnboardingProgressDto {
   if (!isUuid(serverId)) throw new Error('Invalid onboarding progress.');
   return {

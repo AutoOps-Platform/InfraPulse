@@ -14,7 +14,7 @@ const browserDeps = (): DownloadDeps => ({
   fetch: window.fetch.bind(window), document,
   createObjectURL: (blob) => URL.createObjectURL(blob),
   revokeObjectURL: (url) => URL.revokeObjectURL(url),
-  deferRevoke: (cleanup) => { window.setTimeout(cleanup, 0); },
+  deferRevoke: (cleanup) => { window.setTimeout(cleanup, 60_000); },
 });
 
 // One call is exactly one POST. The caller owns the pre-await intent lock and
@@ -70,7 +70,8 @@ export async function downloadBootstrap(
     }
     if (signal.aborted || total === 0 || (length !== null && Number(length) !== total)) throw new ApiError(502, 'invalid_upstream_response');
     // Blob copies bytes; no script is ever React state, text, storage or clipboard.
-    const blob = new Blob(chunks, { type: mime! });
+    // Use application/octet-stream so browsers trigger file download instead of navigating to a blob preview.
+    const blob = new Blob(chunks, { type: 'application/octet-stream' });
     objectUrl = deps.createObjectURL(blob);
     anchor = deps.document.createElement('a');
     anchor.href = objectUrl;

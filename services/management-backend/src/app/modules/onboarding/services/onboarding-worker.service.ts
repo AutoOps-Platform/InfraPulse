@@ -13,8 +13,11 @@ import {
   type ActivationIntent,
   type AgentMetadata,
   type AwsPort,
+  type BootstrapArtifactInput,
   type CommandObservation,
   type CreateActivationResult,
+  type MutationResult,
+  type PublishBootstrapArtifactResult,
 } from '../../../../integrations/aws/aws.port.js';
 import {
   OnboardingRepository,
@@ -137,6 +140,26 @@ export class OnboardingWorker implements OnModuleInit, OnModuleDestroy {
       }, 2500);
     } catch {
       return { kind: sent ? 'Ambiguous' : 'Invalid', code: sent ? 'timeout' : 'aborted' };
+    }
+  }
+
+  async publishBootstrapArtifact(
+    input: BootstrapArtifactInput,
+  ): Promise<PublishBootstrapArtifactResult> {
+    if (this.stopped || this.outbound.size >= 2) return { kind: 'Error', code: 'conflict' };
+    try {
+      return await this.bounded((s) => this.aws.publishBootstrapArtifact(input, s), 8000);
+    } catch {
+      return { kind: 'Error', code: 'timeout' };
+    }
+  }
+
+  async deleteBootstrapArtifact(key: string): Promise<MutationResult> {
+    if (this.stopped || this.outbound.size >= 2) return { kind: 'Error', code: 'conflict' };
+    try {
+      return await this.bounded((s) => this.aws.deleteBootstrapArtifact(key, s), 5000);
+    } catch {
+      return { kind: 'Error', code: 'timeout' };
     }
   }
 

@@ -32,6 +32,8 @@ export interface AwsConfig {
   readonly configVersion: string | null;
   readonly cleanupDocument: string;
   readonly cleanupVersion: string | null;
+  readonly bootstrapBucket: string | null;
+  readonly bootstrapUrlTtlSeconds: number;
   readonly maxActiveNodes: number;
   readonly maxConcurrentOnboarding: number;
   readonly metricsIntervalSeconds: 60;
@@ -121,10 +123,16 @@ export function validateAwsConfig(env: NodeJS.ProcessEnv): AwsConfig {
     if (!/^[1-9]\d{0,9}$/.test(value) || Number(value) > 2147483647) invalid();
     return value;
   };
-  const readCap = (key: string, max: number): number => {
+  const readCap = (key: string, max: number, min = 1): number => {
     const value = env[key] ?? String(max);
-    if (!/^[1-9]\d*$/.test(value) || Number(value) > max) invalid();
+    if (!/^[1-9]\d*$/.test(value) || Number(value) < min || Number(value) > max) invalid();
     return Number(value);
+  };
+  const readBootstrapBucket = (): string | null => {
+    const value = env.INFRAPULSE_BOOTSTRAP_BUCKET;
+    if (value === undefined) return null;
+    if (value !== 'infrapulse-lab-20261118-bootstrap-491333778094') invalid();
+    return value;
   };
 
   return Object.freeze({
@@ -145,6 +153,8 @@ export function validateAwsConfig(env: NodeJS.ProcessEnv): AwsConfig {
       'InfraPulse-lab-20261118-Decommission',
     ),
     cleanupVersion: readVersion('INFRAPULSE_DECOMMISSION_DOCUMENT_VERSION'),
+    bootstrapBucket: readBootstrapBucket(),
+    bootstrapUrlTtlSeconds: readCap('INFRAPULSE_BOOTSTRAP_URL_TTL_SECONDS', 1800, 60),
     maxActiveNodes: readCap('INFRAPULSE_MAX_ACTIVE_NODES', 5),
     maxConcurrentOnboarding: readCap('INFRAPULSE_MAX_CONCURRENT_ONBOARDING', 2),
     metricsIntervalSeconds: 60,

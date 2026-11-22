@@ -1,5 +1,11 @@
 import { CloudWatchClient, GetMetricDataCommand } from '@aws-sdk/client-cloudwatch';
 import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
+import {
   CreateActivationCommand,
   DeleteActivationCommand,
   DeregisterManagedInstanceCommand,
@@ -12,6 +18,7 @@ import {
   SSMClient,
   SendCommandCommand,
 } from '@aws-sdk/client-ssm';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { parseStrictJson } from '../../app/common/pagination.js';
 import {
   buildQueries,
@@ -29,6 +36,7 @@ import {
   type AgentMetadata,
   type AwsErrorCode,
   type AwsPort,
+  type BootstrapArtifactInput,
   type CommandErrorCode,
   type CommandObservation,
   type CommandSummary,
@@ -40,6 +48,7 @@ import {
   type NativeResource,
   type NodeIdentity,
   type NodeMatch,
+  type PublishBootstrapArtifactResult,
   type TimeWindow,
 } from './aws.port.js';
 import type { AgentRelease } from './release-config.js';
@@ -57,6 +66,8 @@ export interface AwsClients {
   mutation: AwsSender;
   read: AwsSender;
   metrics: AwsSender;
+  s3?: AwsSender;
+  presignGet?: (command: GetObjectCommand, expiresIn: number) => Promise<string>;
 }
 
 type ContainerCredentials = ReturnType<typeof import('@aws-sdk/credential-provider-http').fromHttp>;
@@ -75,6 +86,7 @@ export function createAwsClients(
   const mutation = new SSMClient({ ...options, maxAttempts: 1 });
   const read = new SSMClient({ ...options, maxAttempts: 2 });
   const metrics = new CloudWatchClient({ ...options, maxAttempts: 2 });
+  const s3 = new S3Client({ ...options, maxAttempts: 2 });
 
   return {
     mutation: {
@@ -103,6 +115,14 @@ export function createAwsClients(
         throw new Error('invalid_input');
       },
     },
+    s3: {
+      async send(c, o) {
+        if (c instanceof PutObjectCommand) return s3.send(c, o);
+        if (c instanceof DeleteObjectCommand) return s3.send(c, o);
+        throw new Error('invalid_input');
+      },
+    },
+    presignGet: (command, expiresIn) => getSignedUrl(s3, command, { expiresIn }),
   };
 }
 
@@ -440,12 +460,7 @@ export class AwsSdkAdapter implements AwsPort {
       n.ActivationId !== a.activationId ||
       n.ResourceType !== 'ManagedInstance' ||
       n.IamRole !== this.config.roleName ||
-      (a.platform === 'linux'
-        ? n.PlatformType !== 'Linux' || n.PlatformName !== 'Ubuntu' || n.PlatformVersion !== '24.04'
-        : n.PlatformType !== 'Windows' ||
-          n.PlatformName !== 'Microsoft Windows Server 2022' ||
-          typeof n.PlatformVersion !== 'string' ||
-          !/^10\.0\.20348(?:\.\d+)?$/.test(n.PlatformVersion))
+      (a.platform === 'linux' ? n.PlatformType !== 'Linux' : n.PlatformType !== 'Windows')
     ) {
       fail('conflict');
     }
@@ -1147,6 +1162,97 @@ export class AwsSdkAdapter implements AwsPort {
       });
     } catch (e) {
       return { kind: 'Unavailable', code: toErrorCode(e) };
+    }
+  };
+
+  readonly publishBootstrapArtifact = async (
+    input: BootstrapArtifactInput,
+    signal: AbortSignal,
+  ): Promise<PublishBootstrapArtifactResult> => {
+    try {
+      const bucket = this.config.bootstrapBucket;
+      if (
+        !bucket ||
+        !this.clients.s3 ||
+        !this.clients.presignGet ||
+        !/^bootstrap\/[a-f0-9-]{36}\/[a-f0-9-]{36}\/[a-f0-9-]{36}\.(?:sh|ps1)$/.test(input.key) ||
+        !Buffer.isBuffer(input.body) ||
+        input.body.length === 0 ||
+        input.body.length > 262_144 ||
+        !['text/x-shellscript', 'text/plain'].includes(input.contentType) ||
+        !Number.isInteger(input.expiresInSeconds) ||
+        input.expiresInSeconds < 60 ||
+        input.expiresInSeconds > 1800
+      ) {
+        fail('invalid_input');
+      }
+
+      return await this.scope(signal, 8000, async (s) => {
+        await this.send(
+          this.clients.s3!,
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key: input.key,
+            Body: input.body,
+            ContentType: input.contentType,
+            CacheControl: 'no-store',
+            ServerSideEncryption: 'AES256',
+          }),
+          s,
+        );
+        const signedAt = this.now();
+        const url = await this.clients.presignGet!(
+          new GetObjectCommand({
+            Bucket: bucket,
+            Key: input.key,
+            ResponseCacheControl: 'no-store',
+          }),
+          input.expiresInSeconds,
+        );
+        if (
+          s.aborted ||
+          typeof url !== 'string' ||
+          url.length > 4096 ||
+          /[\s'"]/.test(url) ||
+          !url.startsWith(`https://${bucket}.s3.${this.config.region}.amazonaws.com/${input.key}?`)
+        ) {
+          fail('invalid_response');
+        }
+        return {
+          kind: 'Known',
+          url,
+          expiresAt: new Date(+signedAt + input.expiresInSeconds * 1000),
+        };
+      });
+    } catch (e) {
+      const code = toErrorCode(e);
+      return { kind: code === 'permission_denied' ? 'Denied' : 'Error', code };
+    }
+  };
+
+  readonly deleteBootstrapArtifact = async (
+    key: string,
+    signal: AbortSignal,
+  ): Promise<MutationResult> => {
+    try {
+      const bucket = this.config.bootstrapBucket;
+      if (
+        !bucket ||
+        !this.clients.s3 ||
+        !/^bootstrap\/[a-f0-9-]{36}\/[a-f0-9-]{36}\/[a-f0-9-]{36}\.(?:sh|ps1)$/.test(key)
+      ) {
+        fail('invalid_input');
+      }
+      return await this.scope(signal, 5000, async (s) => {
+        await this.send(
+          this.clients.s3!,
+          new DeleteObjectCommand({ Bucket: bucket, Key: key }),
+          s,
+        );
+        return { kind: 'Known' };
+      });
+    } catch (e) {
+      return { kind: 'Error', code: toErrorCode(e) };
     }
   };
 }

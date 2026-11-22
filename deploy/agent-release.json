@@ -298,6 +298,342 @@
         "url": "https://amazon-ssm-ap-southeast-1.s3.ap-southeast-1.amazonaws.com/3.3.5828.0/debian_amd64/amazon-ssm-agent.deb",
         "version": "3.3.5828.0"
       }
+    },
+    "windows": {
+      "cloudWatch": {
+        "files": {
+          "agent": "ea52e60cf748b8cf71eda7c63783d09b5a245a2d39d319e9cb16550a87b0099f",
+          "control": "a619c4ce5442e9b54b5173cc0ffaa9d0c3cbff5223b4dfd3c5ef0bef1eb9e19a",
+          "downloader": "11c45c6d2d42afd4d2bc7705e5c136e7b0979bb6886f169e3a7340e8af5c83ac"
+        },
+        "packageVersion": "1.300075.0b2061",
+        "signer": {
+          "certificateSha256": "5bf978ec2e349db046de2c8374409fe6bca4e572d371150b7fb70b2800d63003",
+          "subject": "Amazon Web Services, Inc."
+        },
+        "version": "1.300075.0b2061"
+      },
+      "configuration": {
+        "plugins": [
+          {
+            "measurements": [
+              {
+                "input": "% Processor Time",
+                "metricKeys": [
+                  "cpu_busy"
+                ]
+              }
+            ],
+            "plugin": "Processor",
+            "resources": [
+              {
+                "dimensions": [
+                  {
+                    "name": "instance",
+                    "value": "_Total"
+                  },
+                  {
+                    "name": "objectname",
+                    "value": "Processor"
+                  }
+                ],
+                "id": "cpu_total",
+                "kind": "cpu",
+                "selector": "_Total"
+              }
+            ]
+          },
+          {
+            "measurements": [
+              {
+                "input": "% Committed Bytes In Use",
+                "metricKeys": [
+                  "memory_used"
+                ]
+              }
+            ],
+            "plugin": "Memory",
+            "resources": [
+              {
+                "dimensions": [
+                  {
+                    "name": "objectname",
+                    "value": "Memory"
+                  }
+                ],
+                "id": "memory",
+                "kind": "memory",
+                "selector": ""
+              }
+            ]
+          },
+          {
+            "measurements": [
+              {
+                "input": "% Free Space",
+                "metricKeys": [
+                  "disk_free"
+                ]
+              }
+            ],
+            "plugin": "LogicalDisk",
+            "resources": [
+              {
+                "dimensions": [
+                  {
+                    "name": "instance",
+                    "value": "C:"
+                  },
+                  {
+                    "name": "objectname",
+                    "value": "LogicalDisk"
+                  }
+                ],
+                "id": "system_disk",
+                "kind": "filesystem",
+                "selector": "C:"
+              }
+            ]
+          },
+          {
+            "measurements": [
+              {
+                "input": "Bytes Sent/sec",
+                "metricKeys": [
+                  "network_sent"
+                ]
+              },
+              {
+                "input": "Bytes Received/sec",
+                "metricKeys": [
+                  "network_received"
+                ]
+              }
+            ],
+            "plugin": "Network Interface",
+            "resources": [
+              {
+                "dimensions": [
+                  {
+                    "name": "instance",
+                    "value": "Microsoft Hyper-V Network Adapter"
+                  },
+                  {
+                    "name": "objectname",
+                    "value": "Network Interface"
+                  }
+                ],
+                "id": "primary_nic",
+                "kind": "interface",
+                "selector": "Microsoft Hyper-V Network Adapter"
+              }
+            ]
+          }
+        ]
+      },
+      "helper": {
+        "sha256": "b791e85605a030da3425204483d2832814c874273591a49b11ae0fc7c78ac4a2",
+        "signer": {
+          "certificateSha256": "9768284923675dbb89272d42c42c0fd601b6873a956d0ac88ab3f313ca342a67",
+          "subject": "Amazon.com Services LLC"
+        },
+        "url": "https://amazon-ssm-ap-southeast-1.s3.ap-southeast-1.amazonaws.com/latest/windows_amd64/ssm-setup-cli.exe",
+        "version": "sha256:b791e85605a030da3425204483d2832814c874273591a49b11ae0fc7c78ac4a2"
+      },
+      "metrics": [
+        {
+          "aggregation": [
+            "Average"
+          ],
+          "dimensions": [
+            {
+              "name": "EnrollmentId",
+              "value": "${EnrollmentId}"
+            },
+            {
+              "name": "ManagedNodeId",
+              "value": "${ManagedNodeId}"
+            },
+            {
+              "name": "ServerId",
+              "value": "${ServerId}"
+            },
+            {
+              "name": "instance",
+              "value": "${native.cpu_total.instance}"
+            },
+            {
+              "name": "objectname",
+              "value": "${native.cpu_total.objectname}"
+            }
+          ],
+          "group": "cpu",
+          "key": "cpu_busy",
+          "metricName": "win_cpu_usage_active",
+          "namespace": "InfraPulse/Lab",
+          "periodSeconds": 60,
+          "resourceId": "cpu_total",
+          "semantics": "gauge",
+          "statistic": "Average",
+          "unit": "Percent"
+        },
+        {
+          "aggregation": [
+            "Average"
+          ],
+          "dimensions": [
+            {
+              "name": "EnrollmentId",
+              "value": "${EnrollmentId}"
+            },
+            {
+              "name": "ManagedNodeId",
+              "value": "${ManagedNodeId}"
+            },
+            {
+              "name": "ServerId",
+              "value": "${ServerId}"
+            },
+            {
+              "name": "objectname",
+              "value": "${native.memory.objectname}"
+            }
+          ],
+          "group": "memory",
+          "key": "memory_used",
+          "metricName": "win_mem_used_percent",
+          "namespace": "InfraPulse/Lab",
+          "periodSeconds": 60,
+          "resourceId": "memory",
+          "semantics": "gauge",
+          "statistic": "Average",
+          "unit": "Percent"
+        },
+        {
+          "aggregation": [
+            "Average"
+          ],
+          "dimensions": [
+            {
+              "name": "EnrollmentId",
+              "value": "${EnrollmentId}"
+            },
+            {
+              "name": "ManagedNodeId",
+              "value": "${ManagedNodeId}"
+            },
+            {
+              "name": "ServerId",
+              "value": "${ServerId}"
+            },
+            {
+              "name": "instance",
+              "value": "${native.system_disk.instance}"
+            },
+            {
+              "name": "objectname",
+              "value": "${native.system_disk.objectname}"
+            }
+          ],
+          "group": "disk",
+          "key": "disk_free",
+          "metricName": "win_disk_free_percent",
+          "namespace": "InfraPulse/Lab",
+          "periodSeconds": 60,
+          "resourceId": "system_disk",
+          "semantics": "gauge",
+          "statistic": "Average",
+          "unit": "Percent"
+        },
+        {
+          "aggregation": [
+            "Average"
+          ],
+          "dimensions": [
+            {
+              "name": "EnrollmentId",
+              "value": "${EnrollmentId}"
+            },
+            {
+              "name": "ManagedNodeId",
+              "value": "${ManagedNodeId}"
+            },
+            {
+              "name": "ServerId",
+              "value": "${ServerId}"
+            },
+            {
+              "name": "instance",
+              "value": "${native.primary_nic.instance}"
+            },
+            {
+              "name": "objectname",
+              "value": "${native.primary_nic.objectname}"
+            }
+          ],
+          "group": "network",
+          "key": "network_sent",
+          "metricName": "win_net_bytes_sent",
+          "namespace": "InfraPulse/Lab",
+          "periodSeconds": 60,
+          "resourceId": "primary_nic",
+          "semantics": "rate",
+          "statistic": "Average",
+          "unit": "Bytes/Second"
+        },
+        {
+          "aggregation": [
+            "Average"
+          ],
+          "dimensions": [
+            {
+              "name": "EnrollmentId",
+              "value": "${EnrollmentId}"
+            },
+            {
+              "name": "ManagedNodeId",
+              "value": "${ManagedNodeId}"
+            },
+            {
+              "name": "ServerId",
+              "value": "${ServerId}"
+            },
+            {
+              "name": "instance",
+              "value": "${native.primary_nic.instance}"
+            },
+            {
+              "name": "objectname",
+              "value": "${native.primary_nic.objectname}"
+            }
+          ],
+          "group": "network",
+          "key": "network_received",
+          "metricName": "win_net_bytes_recv",
+          "namespace": "InfraPulse/Lab",
+          "periodSeconds": 60,
+          "resourceId": "primary_nic",
+          "semantics": "rate",
+          "statistic": "Average",
+          "unit": "Bytes/Second"
+        }
+      ],
+      "parameter": {
+        "name": "/infrapulse/lab-20261118/presets/windows",
+        "sha256": "9bcd326916d2818017290708acc93dc7579d72eabfb5a8b88e9583c0500a119a",
+        "tier": "Standard",
+        "version": 1
+      },
+      "revision": "11f3b4e54feb1324a03f32da86de5752a956c87bf50723da80d1e4b2e30bdd2b",
+      "ssm": {
+        "sha256": "e216f63ef75822f6bec245d796db4a1da7c0a5985ec5f6881980ec9513075f25",
+        "signer": {
+          "certificateSha256": "9768284923675dbb89272d42c42c0fd601b6873a956d0ac88ab3f313ca342a67",
+          "subject": "Amazon.com Services LLC"
+        },
+        "url": "https://amazon-ssm-ap-southeast-1.s3.ap-southeast-1.amazonaws.com/3.3.5828.0/windows_amd64/AmazonSSMAgentSetup.exe",
+        "version": "3.3.5828.0"
+      }
     }
   },
   "schemaVersion": 1

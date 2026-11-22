@@ -44,5 +44,6 @@ test('fleet and detail link destinations use the deployed subpath and never inhe
   assert.equal(fleetHref(), '/grafana/d/infrapulse-fleet');
   const detail = vmMetricsHref(id);
   assert.equal(detail, `/grafana/d/infrapulse-linux-host?var-server_id=${id}`);
+  assert.equal(vmMetricsHref(id, 'windows'), `/grafana/d/infrapulse-windows-host?var-server_id=${id}`);
   assert.equal(vmMetricsHref(`//foreign/?server=${id}`), undefined);
 });

@@ -5,11 +5,17 @@ import type {
   Principal,
   AwsServer,
   BootstrapIntent,
+  BootstrapLink,
   RetryIntent,
   OnboardingProgress,
   ServerInput,
 } from './types';
-import { parseOnboardingProgress, parseDashboardContext, parseConfigurationObservation } from './types';
+import {
+  parseOnboardingProgress,
+  parseBootstrapLink,
+  parseDashboardContext,
+  parseConfigurationObservation,
+} from './types';
 
 import { PLUGIN_ID, isUuid } from './vm-routes';
 export { PLUGIN_ID, appPath, isUuid } from './vm-routes';
@@ -148,6 +154,15 @@ export const api = {
     inventory(await request<unknown>(`api/v1/servers/${id(serverId)}`, 'PATCH', input), serverId),
   onboarding: async (serverId: string, signal?: AbortSignal) =>
     progress(await request<unknown>(`api/v1/servers/${id(serverId)}/onboarding`, 'GET', undefined, signal), serverId),
+  createBootstrapLink: async (serverId: string, input: BootstrapIntent, signal?: AbortSignal): Promise<BootstrapLink> => {
+    const targetId = id(serverId);
+    const data = await request<unknown>(`api/v1/servers/${targetId}/onboarding/bootstrap-link`, 'POST', intent(input), signal);
+    try {
+      return parseBootstrapLink(data, targetId);
+    } catch {
+      throw new ApiError(502, 'invalid_upstream_response');
+    }
+  },
   retryOnboarding: async (serverId: string, input: RetryIntent, signal?: AbortSignal) => {
     if (!['retry-config', 'regenerate-unused'].includes(input.mode)) throw new Error('Invalid retry mode');
     return progress(await request<unknown>(`api/v1/servers/${id(serverId)}/onboarding/retry`, 'POST', { ...intent(input), mode: input.mode }, signal), serverId);

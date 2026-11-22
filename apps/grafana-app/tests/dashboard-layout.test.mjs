@@ -10,17 +10,19 @@ const cloud = { type: 'cloudwatch', uid: 'infrapulse-cloudwatch' };
 const release = json('deploy/agent-release.json');
 const fleetPath = 'dashboards/fleet.json';
 const detailPath = 'dashboards/linux-host.json';
+const windowsPath = 'dashboards/windows-host.json';
 
 function dashboard(files, path) {
   assert.ok(Object.hasOwn(files, path), `missing ${path}`);
   return JSON.parse(files[path]);
 }
 
-test('active release compiles exactly the fleet and Linux detail, with a private-to-build manifest', async () => {
+test('active release compiles fleet, Linux and Windows detail dashboards, with a private-to-build manifest', async () => {
   const files = await loadCompiledCloudWatchDashboards();
-  assert.deepEqual(Object.keys(files).sort(), [fleetPath, detailPath, 'manifest.json']);
+  assert.deepEqual(Object.keys(files).sort(), [fleetPath, detailPath, windowsPath, 'manifest.json']);
   assert.equal(dashboard(files, fleetPath).uid, 'infrapulse-fleet');
   assert.equal(dashboard(files, detailPath).uid, 'infrapulse-linux-host');
+  assert.equal(dashboard(files, windowsPath).uid, 'infrapulse-windows-host');
   const fleet = json('observability/grafana/dashboards/infrapulse/fleet.json');
   const offline = compileCloudWatchDashboards({ schemaVersion: 1, platforms: {} }, { fleet });
   assert.deepEqual(Object.keys(offline).sort(), [fleetPath, 'manifest.json']);
@@ -51,7 +53,7 @@ test('detail interpolates only a fresh closed binding and uses exact canonical L
   const [select, binding] = detail.templating.list;
   assert.equal(detail.templating.list.length, 2);
   assert.equal(select.name, 'server_id');
-  assert.equal(select.query, 'vm-options');
+  assert.equal(select.query, 'vm-options linux');
   assert.equal(select.hide, 0);
   assert.equal(select.skipUrlSync, false);
   assert.deepEqual(select.datasource, inv);
@@ -108,4 +110,13 @@ test('detail interpolates only a fresh closed binding and uses exact canonical L
   assert.ok(series.every(p => p.fieldConfig.defaults.custom.spanNulls === false));
   assert.equal(series.at(-1).fieldConfig.defaults.unit, 'none');
   assert.match(series.at(-1).description, /Bytes\/Second.*chưa xác minh/i);
+
+  const windowsDetail = dashboard(await loadCompiledCloudWatchDashboards(), windowsPath);
+  const [winSelect] = windowsDetail.templating.list;
+  assert.equal(winSelect.query, 'vm-options windows');
+  const winDiskStat = windowsDetail.panels.find(p => p.type === 'stat' && p.targets[0].metricName === 'win_disk_free_percent');
+  assert.deepEqual(winDiskStat.fieldConfig.defaults.thresholds, {
+    mode: 'absolute',
+    steps: [{ color: 'red', value: null }, { color: 'orange', value: 15 }, { color: 'green', value: 30 }],
+  });
 });

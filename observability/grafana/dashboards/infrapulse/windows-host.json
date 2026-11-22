@@ -1,10 +1,7 @@
 {
-  "format": "infrapulse-cloudwatch-template-v1",
+  "format": "infrapulse-cloudwatch-template-v2",
   "platform": "windows",
   "uid": "infrapulse-windows-host",
-  "title": "InfraPulse / Windows Host",
-  "source": "Grafana.com 3563 revision 1; original archive remains unmodified and unprovisioned",
-  "groups": ["cpu", "memory", "disk", "network"],
-  "description": "SOURCE template, not a provisionable dashboard. build-cloudwatch-dashboards.mjs expands the protected qualified canonical manifest, exact resources and native lifecycle measurement mapping. No metric names are defaulted.",
-  "notice": "One current Server / managed node / enrollment only. Windows committed memory is not physical RAM utilization. Disk used is 100 minus qualified free percent. Native network rates are direct, never differentiated. Resource filters come from the backend current verified receipt; filters are not RBAC. No data is unknown, never healthy zero; onboarding, health and operator alert sync are independent."
+  "title": "Chi tiết VM (Windows)",
+  "description": "CloudWatch: CPU, RAM (Committed %), Ổ đĩa C: (% trống) và Network của binding Windows đã được Management xác minh."
 }

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, Header, HttpCode, Param, Post, Req, Res } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -158,6 +158,42 @@ export class OnboardingController {
       }
       throw new ApiError('conflict');
     }
+  }
+
+  @Post(':id/onboarding/bootstrap-link')
+  @HttpCode(200)
+  @UserRoles('Admin')
+  @Header('Cache-Control', 'no-store')
+  @Header('X-Content-Type-Options', 'nosniff')
+  @ApiBody({ type: BootstrapIntentDto })
+  @ApiOperation({
+    summary: 'Issue one-time presigned bootstrap command',
+    description:
+      'Uploads the rendered bootstrap script to the private ephemeral S3 bucket and returns a 30-minute presigned URL and one-line install command. No automatic replay.',
+  })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['serverId', 'attemptId', 'generation', 'platform', 'url', 'expiresAt', 'command'],
+      properties: {
+        serverId: { type: 'string', format: 'uuid' },
+        attemptId: { type: 'string', format: 'uuid' },
+        generation: { type: 'integer', minimum: 1 },
+        platform: { type: 'string', enum: ['linux', 'windows'] },
+        url: { type: 'string', format: 'uri' },
+        expiresAt: { type: 'string', format: 'date-time' },
+        command: { type: 'string' },
+      },
+    },
+  })
+  bootstrapLink(
+    @Param('id') id: string,
+    @Body() intent: BootstrapIntentDto,
+    @CurrentUser() actor: UserPrincipal,
+  ) {
+    return this.onboarding.bootstrapLink(id, intent, actor);
   }
 
   @Post(':id/onboarding/retry')

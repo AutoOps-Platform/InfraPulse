@@ -29,8 +29,9 @@ export function fleetHref(): string | undefined {
   return prefix === undefined ? undefined : `${prefix}/d/infrapulse-fleet`;
 }
 
-export function vmMetricsHref(serverId: string): string | undefined {
+export function vmMetricsHref(serverId: string, platform: 'linux' | 'windows' = 'linux'): string | undefined {
   const prefix = grafanaSubpath();
   if (prefix === undefined || !isUuid(serverId)) return undefined;
-  return `${prefix}/d/infrapulse-linux-host?${new URLSearchParams({ 'var-server_id': serverId })}`;
+  const uid = platform === 'windows' ? 'infrapulse-windows-host' : 'infrapulse-linux-host';
+  return `${prefix}/d/${uid}?${new URLSearchParams({ 'var-server_id': serverId })}`;
 }

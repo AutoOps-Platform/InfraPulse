@@ -1,13 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Button, Checkbox, LinkButton } from '@grafana/ui';
+import { Alert, Button, Checkbox, LinkButton, useStyles2 } from '@grafana/ui';
 import { api, errorMessage } from '../api/client';
 import { buildDashboardUrl, buildRuleUrl } from '../api/dashboard';
 import { downloadBootstrap } from '../api/download';
-import type { AwsServer, BootstrapIntent, OnboardingProgress, RetryIntent } from '../api/types';
-import { useAdmin } from '../components/Common';
+import type { AwsServer, BootstrapIntent, BootstrapLink, OnboardingProgress, RetryIntent } from '../api/types';
+import { time, useAdmin } from '../components/Common';
 import { OnboardingStatus, useOnboardingProgress } from '../components/OnboardingStatus';
+import { getStyles } from '../styles';
 
-type Operation = 'download' | RetryIntent['mode'] | 'decommission';
+type Operation = 'bootstrap-link' | 'download' | RetryIntent['mode'] | 'decommission';
 function receiptKey(p: OnboardingProgress) {
   return JSON.stringify([p.serverId, p.attemptId, p.enrollmentId, p.generation, p.state, p.stage, p.bindingState,
     p.agent.nodeId, p.availability.available, p.availability.configurationVersion, p.alertSync.generation,
@@ -16,11 +17,14 @@ function receiptKey(p: OnboardingProgress) {
 
 export function VmOnboarding({ server, refreshInventory }: { server?: AwsServer; refreshInventory: () => void }) {
   const admin = useAdmin();
+  const s = useStyles2(getStyles);
   const status = useOnboardingProgress(server?.id);
   const p = status.progress;
   const [pending, setPending] = useState(false);
   const [failure, setFailure] = useState<string>();
   const [notice, setNotice] = useState<string>();
+  const [bootstrapLink, setBootstrapLink] = useState<BootstrapLink>();
+  const [copied, setCopied] = useState(false);
   const [confirmDecommission, setConfirmDecommission] = useState(false);
   const lock = useRef<{ kind: Operation; intent: BootstrapIntent } | undefined>(undefined);
   const downloadedGenerations = useRef(new Set<number>());
@@ -31,10 +35,19 @@ export function VmOnboarding({ server, refreshInventory }: { server?: AwsServer;
     mounted.current = true;
     return () => {
       mounted.current = false;
-      if (timeout.current !== undefined) clearTimeout(timeout.current);
+      if (timeout.current !== undefined) {
+        clearTimeout(timeout.current);
+      }
       controller.current?.abort();
     };
   }, []);
+  const visibleLink =
+    bootstrapLink &&
+    server &&
+    bootstrapLink.serverId === server.id &&
+    (!p || ['AwaitingBootstrap', 'AwaitingRegistration'].includes(p.stage))
+      ? bootstrapLink
+      : undefined;
   const latest = p && !status.error ? receiptKey(p) : undefined;
   const coherent = Boolean(latest && server && latest === receiptKey(server.onboarding));
   const mismatch = server && !coherent ? latest : undefined;
@@ -53,8 +66,23 @@ export function VmOnboarding({ server, refreshInventory }: { server?: AwsServer;
   const canRegenerate = Boolean(p?.availability.available && p.attemptId && p.bindingState === null && ['Pending', 'Failed', 'Expired'].includes(p.state) && ['AwaitingRegistration', 'ReconcilingActivation', 'Failed', 'Expired', 'CleanupRequired'].includes(p.stage));
   const canRetryConfig = p?.availability.available && p.bindingState === 'Active' && ['Success', 'Failed'].includes(p.state) && !['Decommissioning', 'CleanupRequired', 'Retired'].includes(p.stage);
   const canDecommission = Boolean(p?.attemptId && !['Decommissioning', 'Retired'].includes(p.stage));
+  const copyCommand = async () => {
+    if (!visibleLink) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(visibleLink.command);
+      if (mounted.current) {
+        setCopied(true);
+      }
+    } catch {
+      if (mounted.current) {
+        setCopied(false);
+      }
+    }
+  };
   const execute = async (kind: Operation) => {
-    if (!server || blocked || lock.current || !p || (kind !== 'decommission' && !p.availability.available) || (kind === 'download' && !canDownload) || (kind === 'regenerate-unused' && !canRegenerate) || (kind === 'retry-config' && !canRetryConfig) || (kind === 'decommission' && (!canDecommission || !confirmDecommission))) return;
+    if (!server || blocked || lock.current || !p || (kind !== 'decommission' && !p.availability.available) || ((kind === 'download' || kind === 'bootstrap-link') && !canDownload) || (kind === 'regenerate-unused' && !canRegenerate) || (kind === 'retry-config' && !canRetryConfig) || (kind === 'decommission' && (!canDecommission || !confirmDecommission))) return;
     // Synchronous intent fence precedes the first await. Never regenerate this
     // UUID on a timeout, AbortError or ambiguous response; no automatic POSTs.
     const intent = { requestId: crypto.randomUUID() };
@@ -64,10 +92,17 @@ export function VmOnboarding({ server, refreshInventory }: { server?: AwsServer;
     setPending(true);
     setFailure(undefined);
     setNotice(undefined);
+    setCopied(false);
     timeout.current = setTimeout(() => abort.abort(), 30000);
-    if (kind === 'download') downloadedGenerations.current.add(p.generation);
+    if (kind === 'download' || kind === 'bootstrap-link') downloadedGenerations.current.add(p.generation);
     try {
-      if (kind === 'download') {
+      if (kind === 'bootstrap-link') {
+        const link = await api.createBootstrapLink(server.id, intent, abort.signal);
+        if (!mounted.current) return;
+        setBootstrapLink(link);
+        setNotice('One-time install command created (presigned S3 URL valid for 30 minutes). Run it on the target host; no replay is available.');
+        await status.refresh();
+      } else if (kind === 'download') {
         await downloadBootstrap(server.id, intent, abort.signal);
         if (!mounted.current) return;
         setNotice('Browser download requested. Saving and local execution are not observed by this page. No attachment replay is available.');
@@ -78,17 +113,18 @@ export function VmOnboarding({ server, refreshInventory }: { server?: AwsServer;
           : await api.retryOnboarding(server.id, { ...intent, mode: kind }, abort.signal);
         if (!mounted.current) return;
         status.accept(result);
+        setBootstrapLink(undefined);
         setNotice(kind === 'regenerate-unused'
-          ? 'Recovery result recorded. Only Pending / AwaitingBootstrap permits a NEW deliberate download below; no download starts automatically. The backend requires the same recovery actor and current generation.'
+          ? 'Recovery result recorded. Only Pending / AwaitingBootstrap permits a NEW deliberate bootstrap action below; no download starts automatically. The backend requires the same recovery actor and current generation.'
           : kind === 'decommission'
             ? 'Decommission intent accepted, not a cleanup or Retired receipt. Inspect persisted progress.'
             : 'Configuration retry accepted for the registered node; no activation was regenerated.');
       }
       if (mounted.current) { lock.current = undefined; setConfirmDecommission(false); }
     } catch (error: unknown) {
-      if (mounted.current) setFailure(`Outcome unknown; this intent will not be replayed. ${errorMessage(error)} Read persisted progress before a NEW deliberate recovery operation. A lost download cannot be retrieved.`);
+      if (mounted.current) setFailure(`Outcome unknown; this intent will not be replayed. ${errorMessage(error)} Read persisted progress before a NEW deliberate recovery operation. A lost bootstrap cannot be retrieved.`);
       // Keep the intent fence after every failure; only an explicit successful
-      // GET inspection permits a new action. Same-generation download stays spent.
+      // GET inspection permits a new action. Same-generation bootstrap stays spent.
     } finally {
       if (timeout.current !== undefined) clearTimeout(timeout.current);
       if (mounted.current) setPending(false);
@@ -114,7 +150,7 @@ export function VmOnboarding({ server, refreshInventory }: { server?: AwsServer;
   const metrics = coherent ? buildDashboardUrl(server) : undefined;
   return <>
     <h2>Onboarding</h2>
-    {!admin && <p>Read-only. A Management Admin can download bootstrap and request recovery.</p>}
+    {!admin && <p>Read-only. A Management Admin can issue bootstrap commands and request recovery.</p>}
     <Button variant="secondary" disabled={pending || status.reading} onClick={() => { void inspect(); }}>Refresh progress</Button>
     <p>{status.pollState}</p>
     {status.reading && <p>Reading persisted progress…</p>}
@@ -127,10 +163,21 @@ export function VmOnboarding({ server, refreshInventory }: { server?: AwsServer;
       {server.alertRuleUids.map(uid => <LinkButton key={uid} variant="secondary" href={buildRuleUrl(uid)}>Rule {uid}</LinkButton>)}
     </details>}
     {admin && !server.archived_at && <>
-      <Button disabled={blocked || !canDownload} onClick={() => { void execute('download'); }}>{pending ? 'Operation in progress…' : 'Download one-time bootstrap file'}</Button>
-      <p>Keep the file private. Run the saved file only on this intended {server.os} host, as {server.os === 'linux' ? 'root' : 'Administrator in elevated PowerShell under local execution policy'}. Do not share its activation values or clear lifecycle markers to re-register. Remove the file after use.</p>
+      <div className={s.row}>
+        <Button disabled={blocked || !canDownload} onClick={() => { void execute('bootstrap-link'); }}>{pending ? 'Operation in progress…' : 'Get 1-line install command (30m)'}</Button>
+        <Button variant="secondary" disabled={blocked || !canDownload} onClick={() => { void execute('download'); }}>{pending ? 'Operation in progress…' : 'Download one-time bootstrap file'}</Button>
+      </div>
+      <p>Keep the command and file private. Run the saved file only on this intended {server.os} host, as {server.os === 'linux' ? 'root (or sudo)' : 'Administrator in elevated PowerShell under local execution policy'}. Do not share its activation values or clear lifecycle markers to re-register. Remove the file after use.</p>
     </>}
-    {p?.stage === 'AwaitingBootstrap' && p.attemptId && <p>This is a prepared unused-activation recovery. The Admin who requested recovery must use a new deliberate download click for this current generation.</p>}
+    {visibleLink && <Alert severity="info" title={`One-time install command (link expires ${time(visibleLink.expiresAt)})`}>
+      <p>Copy and run this command on the target {visibleLink.platform} host. The presigned S3 link expires in 30 minutes and S3 Lifecycle automatically removes the file.</p>
+      <pre className={s.code}>{visibleLink.command}</pre>
+      <div className={s.row}>
+        <Button size="sm" onClick={() => { void copyCommand(); }}>{copied ? 'Copied!' : 'Copy command'}</Button>
+        <Button size="sm" variant="secondary" onClick={() => { setBootstrapLink(undefined); setCopied(false); }}>Hide command</Button>
+      </div>
+    </Alert>}
+    {p?.stage === 'AwaitingBootstrap' && p.attemptId && <p>This is a prepared unused-activation recovery. The Admin who requested recovery must use a new deliberate bootstrap click for this current generation.</p>}
     {admin && !server.archived_at && <details>
       <summary>Advanced recovery</summary>
       <p>Recovery cannot reuse a registered activation. Retry configuration for an Active node. A cleanup request is not proof of completion.</p>
