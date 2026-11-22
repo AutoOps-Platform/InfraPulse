@@ -1,240 +1,193 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Checkbox, LinkButton, useStyles2 } from '@grafana/ui';
-import { api, ApiError, appPath } from '../api/client';
-import { useResource } from '../hooks/useApi';
-import { useSelection } from '../hooks/useSelection';
-import { LoadState, TelemetryView, useAdmin } from '../components/Common';
-import { ServerForm } from '../components/ServerForm';
-import { AgentPicker, ServerPicker } from '../components/Pickers';
-import { ProfileBrowser } from '../components/ProfileBrowser';
-import { Confirm } from '../components/Confirm';
-import { IssueCredential } from '../components/IssueCredential';
-import { ExistingKeyPreview } from '../components/SecretModal';
-import type { Agent, Server } from '../api/types';
+import { api, errorMessage } from '../api/client';
+import { buildDashboardUrl, buildRuleUrl } from '../api/dashboard';
+import { downloadBootstrap } from '../api/download';
+import type { AwsServer, BootstrapIntent, BootstrapLink, OnboardingProgress, RetryIntent } from '../api/types';
+import { time, useAdmin } from '../components/Common';
+import { OnboardingStatus, useOnboardingProgress } from '../components/OnboardingStatus';
 import { getStyles } from '../styles';
 
-function Onboarding({
-  server,
-  agent,
-  onAgent,
-}: {
-  server: Server;
-  agent?: Agent;
-  onAgent: (agent: Agent | undefined) => void;
-}) {
-  const [register, setRegister] = useState(false);
-  const [agentRevision, setAgentRevision] = useState(0);
-  const [acceptedVersion, setAcceptedVersion] = useState('');
-  const [paste, setPaste] = useState(false);
-  const admin = useAdmin();
-  const s = useStyles2(getStyles);
-  const desired = useResource(`onboarding-assignment:${server.id}`, async (signal) => {
-    try {
-      const assignment = await api.assignment(server.id, signal);
-      const version = await api.version(assignment.profile_version_id);
-      return { assignment, version };
-    } catch (failure: unknown) {
-      if (failure instanceof ApiError && failure.status === 404) {
-        return null;
-      }
-      throw failure;
-    }
-  });
-  const ready = Boolean(
-    desired.data &&
-      desired.data.version.id === desired.data.assignment.profile_version_id &&
-      desired.data.version.status === 'published' &&
-      desired.data.version.config.os === server.os &&
-      acceptedVersion === desired.data.version.id &&
-      !server.archived_at &&
-      agent?.server_id === server.id &&
-      agent.lifecycle === 'active'
-  );
-  return (
-    <>
-      <section className={s.card}>
-        <h2>2. Register or select one active Agent</h2>
-        <p>
-          Server OS is authoritative: <strong>{server.os}</strong>. Identity is assigned by Management, never by the
-          installer or URL.
-        </p>
-        {server.archived_at && (
-          <Alert severity="warning" title="Archived Server">
-            Select an unarchived Server before onboarding.
-          </Alert>
-        )}
-        {admin && (
-          <Button disabled={Boolean(server.archived_at)} onClick={() => setRegister(true)}>
-            Register one active Telegraf Agent
-          </Button>
-        )}
-        <AgentPicker
-          key={`${server.id}:${agentRevision}`}
-          server={server}
-          value={agent}
-          onChange={onAgent}
-          activeOnly
-        />
-        {register && (
-          <Confirm
-            title="Register Agent on this Server?"
-            warning={`Register a new active Telegraf Agent for ${server.name} (${server.id}, ${server.os}). Only one active Agent per Server is allowed; 409 means inspect current Agents rather than blindly retry. Registration is not installation or Online.`}
-            operation={async () => {
-              const result = await api.registerAgent(server.id);
-              onAgent(result);
-            }}
-            onDone={() => setAgentRevision((id) => id + 1)}
-            onClose={() => setRegister(false)}
-          />
-        )}
-      </section>
-      <section className={s.card}>
-        <h2>3. Assign an exact compatible published profile</h2>
-        <LoadState {...desired}>
-          {desired.data ? (
-            <>
-              <p>
-                Desired version: <strong>{desired.data.version.id}</strong> · v{desired.data.version.version} ·{' '}
-                {desired.data.version.status}
-                <br />
-                OS: {desired.data.version.config.os}
-                <br />
-                Checksum: {desired.data.version.checksum}
-              </p>
-              <Checkbox
-                label="I reviewed and choose this exact desired published version for onboarding."
-                disabled={desired.data.version.status !== 'published' || desired.data.version.config.os !== server.os}
-                checked={acceptedVersion === desired.data.version.id}
-                onChange={(e) => setAcceptedVersion(e.currentTarget.checked ? (desired.data?.version.id ?? '') : '')}
-              />
-            </>
-          ) : (
-            <Alert severity="info" title="No profile assigned">
-              Use the published-version browser below to assign a compatible exact version before issuing a key.
-            </Alert>
-          )}
-        </LoadState>
-        <Button
-          variant="secondary"
-          onClick={() => {
-            setAcceptedVersion('');
-            desired.retry();
-          }}
-        >
-          Refresh desired assignment
-        </Button>
-        <ProfileBrowser
-          server={server}
-          onAssigned={() => {
-            setAcceptedVersion('');
-            desired.retry();
-          }}
-        />
-      </section>
-      <section className={s.card}>
-        <h2>4. Issue once, preview, then install locally</h2>
-        <p>
-          All three credential scopes are required. The one-time key modal allows actual provisioning preview without
-          placing the key in commands. Preview records a receipt only; it does not apply configuration or prove
-          installation.
-        </p>
-        {!admin && (
-          <Alert severity="warning" title="Admin required">
-            Ask an Admin to register, assign and issue credentials. Backend RBAC remains authoritative.
-          </Alert>
-        )}
-        {admin && agent && ready ? (
-          <>
-            <IssueCredential
-              key={`${server.id}:${agent.id}:${desired.data?.version.id}`}
-              server={server}
-              agent={agent}
-              provisioning
-              expectedProfile={
-                desired.data
-                  ? { versionId: desired.data.version.id, checksum: desired.data.version.checksum }
-                  : undefined
-              }
-              onChanged={() => undefined}
-            />
-            <Button variant="secondary" onClick={() => setPaste(true)}>
-              Explicitly use an existing securely held key for preview
-            </Button>
-            {paste && (
-              <ExistingKeyPreview
-                server={server}
-                agent={agent}
-                expectedProfile={
-                  desired.data
-                    ? { versionId: desired.data.version.id, checksum: desired.data.version.checksum }
-                    : undefined
-                }
-                onClose={() => setPaste(false)}
-              />
-            )}
-          </>
-        ) : (
-          <Alert severity="info" title="Finish selection and assignment">
-            Select an active Agent and explicitly accept an OS-compatible published version before credential issuance
-            or preview.
-          </Alert>
-        )}
-      </section>
-      {agent && (
-        <section className={s.card}>
-          <h2>5. Observe actual telemetry</h2>
-          <TelemetryView telemetry={agent.telemetry} />
-          <p>
-            This is the last Management response for the selected Agent, not refreshed installation proof. Open
-            monitoring and refresh authoritative telemetry after actual local installation.
-          </p>
-          <LinkButton
-            href={`${appPath('monitoring')}?${new URLSearchParams({ server: server.id, agent: agent.id }).toString()}`}
-          >
-            View monitoring for these IDs
-          </LinkButton>
-        </section>
-      )}
-    </>
-  );
+type Operation = 'bootstrap-link' | 'download' | RetryIntent['mode'] | 'decommission';
+function receiptKey(p: OnboardingProgress) {
+  return JSON.stringify([p.serverId, p.attemptId, p.enrollmentId, p.generation, p.state, p.stage, p.bindingState,
+    p.agent.nodeId, p.availability.available, p.availability.configurationVersion, p.alertSync.generation,
+    p.alertSync.state, p.alertSync.desiredHash, p.alertSync.syncedAt]);
 }
-export default function Install() {
-  const selection = useSelection();
-  const [create, setCreate] = useState(false);
+
+export function VmOnboarding({ server, refreshInventory }: { server?: AwsServer; refreshInventory: () => void }) {
   const admin = useAdmin();
   const s = useStyles2(getStyles);
-  return (
-    <>
-      <h1>Install / onboarding</h1>
-      <p>
-        Register inventory → select Agent → assign published profile → issue once → preview actual provisioning → run a
-        reviewed local installer → observe metrics. No step here claims installed/applied/Online.
-      </p>
-      {selection.invalid && (
-        <Alert severity="error" title="Invalid selection">
-          Choose authoritative records below.
-        </Alert>
-      )}
-      <LoadState {...selection.initial} />
-      <section className={s.card}>
-        <h2>1. Add or select a Server</h2>
-        <div className={s.row}>
-          {admin && <Button onClick={() => setCreate(true)}>Add Server</Button>}
-          <LinkButton variant="secondary" href={appPath('servers')}>
-            Server inventory
-          </LinkButton>
-        </div>
-        <ServerPicker value={selection.server} onChange={selection.setServer} />
-      </section>
-      {create && <ServerForm onClose={() => setCreate(false)} onSaved={selection.setServer} />}
-      {selection.server && (
-        <Onboarding
-          key={selection.server.id}
-          server={selection.server}
-          agent={selection.agent}
-          onAgent={selection.setAgent}
-        />
-      )}
-    </>
-  );
+  const status = useOnboardingProgress(server?.id);
+  const p = status.progress;
+  const [pending, setPending] = useState(false);
+  const [failure, setFailure] = useState<string>();
+  const [notice, setNotice] = useState<string>();
+  const [bootstrapLink, setBootstrapLink] = useState<BootstrapLink>();
+  const [copied, setCopied] = useState(false);
+  const [confirmDecommission, setConfirmDecommission] = useState(false);
+  const lock = useRef<{ kind: Operation; intent: BootstrapIntent } | undefined>(undefined);
+  const downloadedGenerations = useRef(new Set<number>());
+  const controller = useRef<AbortController | undefined>(undefined);
+  const timeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      if (timeout.current !== undefined) {
+        clearTimeout(timeout.current);
+      }
+      controller.current?.abort();
+    };
+  }, []);
+  const visibleLink =
+    bootstrapLink &&
+    server &&
+    bootstrapLink.serverId === server.id &&
+    (!p || ['AwaitingBootstrap', 'AwaitingRegistration'].includes(p.stage))
+      ? bootstrapLink
+      : undefined;
+  const latest = p && !status.error ? receiptKey(p) : undefined;
+  const coherent = Boolean(latest && server && latest === receiptKey(server.onboarding));
+  const mismatch = server && !coherent ? latest : undefined;
+  const refreshedMismatch = useRef<string | undefined>(undefined);
+  const inspecting = useRef(false);
+  useEffect(() => {
+    if (coherent) refreshedMismatch.current = undefined;
+    if (!mismatch || inspecting.current || refreshedMismatch.current === mismatch) return;
+    refreshedMismatch.current = mismatch;
+    refreshInventory();
+  }, [coherent, mismatch, refreshInventory]);
+  const blocked = !coherent || !admin || Boolean(server?.archived_at) || !p || pending || status.reading || Boolean(status.error) || Boolean(failure);
+  // AwaitingBootstrap is also the genuine B4 *prepared* recovery generation.
+  // No blanket non-retired-history block: backend enforces actor/generation CAS.
+  const canDownload = p?.availability.available && p.state === 'Pending' && p.stage === 'AwaitingBootstrap' && p.bindingState === null && !downloadedGenerations.current.has(p.generation);
+  const canRegenerate = Boolean(p?.availability.available && p.attemptId && p.bindingState === null && ['Pending', 'Failed', 'Expired'].includes(p.state) && ['AwaitingRegistration', 'ReconcilingActivation', 'Failed', 'Expired', 'CleanupRequired'].includes(p.stage));
+  const canRetryConfig = p?.availability.available && p.bindingState === 'Active' && ['Success', 'Failed'].includes(p.state) && !['Decommissioning', 'CleanupRequired', 'Retired'].includes(p.stage);
+  const canDecommission = Boolean(p?.attemptId && !['Decommissioning', 'Retired'].includes(p.stage));
+  const copyCommand = async () => {
+    if (!visibleLink) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(visibleLink.command);
+      if (mounted.current) {
+        setCopied(true);
+      }
+    } catch {
+      if (mounted.current) {
+        setCopied(false);
+      }
+    }
+  };
+  const execute = async (kind: Operation) => {
+    if (!server || blocked || lock.current || !p || (kind !== 'decommission' && !p.availability.available) || ((kind === 'download' || kind === 'bootstrap-link') && !canDownload) || (kind === 'regenerate-unused' && !canRegenerate) || (kind === 'retry-config' && !canRetryConfig) || (kind === 'decommission' && (!canDecommission || !confirmDecommission))) return;
+    // Synchronous intent fence precedes the first await. Never regenerate this
+    // UUID on a timeout, AbortError or ambiguous response; no automatic POSTs.
+    const intent = { requestId: crypto.randomUUID() };
+    lock.current = { kind, intent };
+    const abort = new AbortController();
+    controller.current = abort;
+    setPending(true);
+    setFailure(undefined);
+    setNotice(undefined);
+    setCopied(false);
+    timeout.current = setTimeout(() => abort.abort(), 30000);
+    if (kind === 'download' || kind === 'bootstrap-link') downloadedGenerations.current.add(p.generation);
+    try {
+      if (kind === 'bootstrap-link') {
+        const link = await api.createBootstrapLink(server.id, intent, abort.signal);
+        if (!mounted.current) return;
+        setBootstrapLink(link);
+        setNotice('One-time install command created (presigned S3 URL valid for 30 minutes). Run it on the target host; no replay is available.');
+        await status.refresh();
+      } else if (kind === 'download') {
+        await downloadBootstrap(server.id, intent, abort.signal);
+        if (!mounted.current) return;
+        setNotice('Browser download requested. Saving and local execution are not observed by this page. No attachment replay is available.');
+        await status.refresh();
+      } else {
+        const result = kind === 'decommission'
+          ? await api.decommission(server.id, intent, abort.signal)
+          : await api.retryOnboarding(server.id, { ...intent, mode: kind }, abort.signal);
+        if (!mounted.current) return;
+        status.accept(result);
+        setBootstrapLink(undefined);
+        setNotice(kind === 'regenerate-unused'
+          ? 'Recovery result recorded. Only Pending / AwaitingBootstrap permits a NEW deliberate bootstrap action below; no download starts automatically. The backend requires the same recovery actor and current generation.'
+          : kind === 'decommission'
+            ? 'Decommission intent accepted, not a cleanup or Retired receipt. Inspect persisted progress.'
+            : 'Configuration retry accepted for the registered node; no activation was regenerated.');
+      }
+      if (mounted.current) { lock.current = undefined; setConfirmDecommission(false); }
+    } catch (error: unknown) {
+      if (mounted.current) setFailure(`Outcome unknown; this intent will not be replayed. ${errorMessage(error)} Read persisted progress before a NEW deliberate recovery operation. A lost bootstrap cannot be retrieved.`);
+      // Keep the intent fence after every failure; only an explicit successful
+      // GET inspection permits a new action. Same-generation bootstrap stays spent.
+    } finally {
+      if (timeout.current !== undefined) clearTimeout(timeout.current);
+      if (mounted.current) setPending(false);
+    }
+  };
+  const inspect = async () => {
+    if (inspecting.current) return;
+    inspecting.current = true;
+    try {
+      const result = await status.refresh();
+      if (mounted.current && result && !pending) {
+        lock.current = undefined;
+        setFailure(undefined);
+        refreshedMismatch.current = receiptKey(result);
+        refreshInventory();
+      }
+    } finally {
+      inspecting.current = false;
+    }
+  };
+  // Stay mounted when only the same VM's authoritative inventory is reloading.
+  if (!server) return null;
+  const metrics = coherent ? buildDashboardUrl(server) : undefined;
+  return <>
+    <h2>Onboarding</h2>
+    {!admin && <p>Read-only. A Management Admin can issue bootstrap commands and request recovery.</p>}
+    <Button variant="secondary" disabled={pending || status.reading} onClick={() => { void inspect(); }}>Refresh progress</Button>
+    <p>{status.pollState}</p>
+    {status.reading && <p>Reading persisted progress…</p>}
+    {status.error && <Alert severity="error" title="Progress unavailable — metrics Unknown">{status.error}</Alert>}
+    {p && <OnboardingStatus progress={p} configuration={coherent ? server.configuration : undefined} unavailable={Boolean(status.error)} />}
+    {p && !status.error && !coherent && <p>Configuration and monitoring links are unavailable until the current inventory receipt agrees.</p>}
+    {metrics && <LinkButton href={metrics}>Open metrics</LinkButton>}
+    {coherent && server.alertRuleUids.length > 0 && <details>
+      <summary>Alert rules for the current receipt</summary>
+      {server.alertRuleUids.map(uid => <LinkButton key={uid} variant="secondary" href={buildRuleUrl(uid)}>Rule {uid}</LinkButton>)}
+    </details>}
+    {admin && !server.archived_at && <>
+      <div className={s.row}>
+        <Button disabled={blocked || !canDownload} onClick={() => { void execute('bootstrap-link'); }}>{pending ? 'Operation in progress…' : 'Get 1-line install command (30m)'}</Button>
+        <Button variant="secondary" disabled={blocked || !canDownload} onClick={() => { void execute('download'); }}>{pending ? 'Operation in progress…' : 'Download one-time bootstrap file'}</Button>
+      </div>
+      <p>Keep the command and file private. Run the saved file only on this intended {server.os} host, as {server.os === 'linux' ? 'root (or sudo)' : 'Administrator in elevated PowerShell under local execution policy'}. Do not share its activation values or clear lifecycle markers to re-register. Remove the file after use.</p>
+    </>}
+    {visibleLink && <Alert severity="info" title={`One-time install command (link expires ${time(visibleLink.expiresAt)})`}>
+      <p>Copy and run this command on the target {visibleLink.platform} host. The presigned S3 link expires in 30 minutes and S3 Lifecycle automatically removes the file.</p>
+      <pre className={s.code}>{visibleLink.command}</pre>
+      <div className={s.row}>
+        <Button size="sm" onClick={() => { void copyCommand(); }}>{copied ? 'Copied!' : 'Copy command'}</Button>
+        <Button size="sm" variant="secondary" onClick={() => { setBootstrapLink(undefined); setCopied(false); }}>Hide command</Button>
+      </div>
+    </Alert>}
+    {p?.stage === 'AwaitingBootstrap' && p.attemptId && <p>This is a prepared unused-activation recovery. The Admin who requested recovery must use a new deliberate bootstrap click for this current generation.</p>}
+    {admin && !server.archived_at && <details>
+      <summary>Advanced recovery</summary>
+      <p>Recovery cannot reuse a registered activation. Retry configuration for an Active node. A cleanup request is not proof of completion.</p>
+      <Button variant="secondary" disabled={blocked || !canRegenerate} onClick={() => { void execute('regenerate-unused'); }}>Request unused-activation recovery</Button>{' '}
+      <Button variant="secondary" disabled={blocked || !canRetryConfig} onClick={() => { void execute('retry-config'); }}>Retry configuration of registered node</Button>
+      <p><Checkbox label="I intend asynchronous decommission (or explicit CleanupRequired retry); this does not assert cleanup completion" checked={confirmDecommission} disabled={blocked || !canDecommission} onChange={(event) => setConfirmDecommission(event.currentTarget.checked)} /></p>
+      <Button variant="destructive" disabled={blocked || !canDecommission || !confirmDecommission} onClick={() => { void execute('decommission'); }}>Request decommission / cleanup retry</Button>
+    </details>}
+    {failure && <Alert severity="warning" title="Mutation result uncertain — inspect, do not replay">{failure}</Alert>}
+    {notice && <Alert severity="info" title="Operation receipt">{notice}</Alert>}
+    <p>A request receipt, downloaded file, SSM registration, configuration result and independent CloudWatch metrics are separate evidence. Alert sync remains required until an operator current-generation receipt.</p>
+  </>;
 }

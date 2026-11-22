@@ -1,4 +1,76 @@
-# Management backend — protected lab deployment
+# Management backend — external PostgreSQL connection
+
+## Current deployment — ECS on EC2
+
+[Terraform ECS](<../../infra/terraform/ecs.tf>) runs **Management and Grafana**. Store the complete external PostgreSQL runtime URL in the Management `database-url` SSM Parameter Store `SecureString` and set `ecs_parameter_arns.management.database_url` to its ARN. The task initializer writes the value to `/run/secrets/management-db-url`; `MANAGEMENT_DATABASE_URL_FILE` selects that file. Use the same file interface for Neon or another compatible PostgreSQL provider. Do not put credentials in Terraform inputs or logs.
+
+Management passes the connection string to Prisma without rewriting it or requiring specific URL parameters. The adapter targets the `management` schema, and `pg` handles the URL's TLS options; use `sslmode=verify-full` for remote databases. `/health/ready` runs `SELECT 1` only: it proves connectivity, not that the schema or grants are correct. Prepare the schema separately and use a least-privilege runtime role. The application does not create, migrate, seed, or inspect the catalog at startup.
+
+Management UID10002 receives only the DB file and `/run/secrets/assertion-trust`. It receives no owner/bootstrap/alert DB credentials, Grafana Admin or private signing key. Grafana UID472 receives its assertion key and first-start admin user/password files and uses its own persistent SQLite volume. New admin-file values do not reset an existing SQLite account.
+
+Use the [ECS runbook](<aws-lab.md>) for image builds, runtime inputs and rollout. Alert-sync source and host-loopback transport are **unchanged and deferred**; ECS does not reconcile alerts automatically.
+
+## Current code layout — modular NestJS
+
+The [composition root](<../../services/management-backend/src/app.module.ts>) keeps one Management application. [Config](<../../services/management-backend/src/config/config.ts>) composes app, PostgreSQL, Grafana and AWS settings. [PrismaService](<../../services/management-backend/src/database/prisma.service.ts>) extends the generated Prisma client and sets adapter, pool, deadline and shutdown behavior. Callers use `$transaction` and the generated client directly; readiness belongs to the health module.
+
+Business modules live under `src/modules`: auth, servers, groups, audit, health, onboarding and monitoring. Controllers handle HTTP; services validate and coordinate transactions/audit; typed repositories execute queries using the caller's transaction. [ServersService](<../../services/management-backend/src/modules/servers/services/servers.service.ts>) and [ServersRepository](<../../services/management-backend/src/modules/servers/repositories/servers.repository.ts>) show this split. Auth still verifies the raw request and authorizes before consuming its nonce. DTOs, routes and OpenAPI contracts are unchanged.
+
+The [onboarding module](<../../services/management-backend/src/modules/onboarding/onboarding.module.ts>) injects one shared store, [worker](<../../services/management-backend/src/modules/onboarding/workers/onboarding.worker.ts>) and decommission service. Its domain state/CAS/lease and uncertain-send logic remain in the same process, not another container or a generic CRUD layer. [AWS integration](<../../services/management-backend/src/integrations/aws/aws.module.ts>) and monitoring share the qualified port. No BFF, gRPC or Redis is added.
+
+Image entry remains `node dist/main.js`; root-owned release and generated assets remain under `/app/release` and `/app/generated`, outside `dist`. The legacy migrations and alert-sync host-loopback transport are unchanged. The separate owner-only push operator is not invoked by the application and currently accepts only the local synthetic fixture. The pinned Prisma engine passes the URL in subprocess arguments, so the operator must not be used with real credentials. Local PostgreSQL fixture results do not qualify the live Neon endpoint, ECS network, or alert delivery.
+
+## Historical AWS source notes — superseded deployment matrix
+
+Everything below is retained history, including “current” headings, staged-executor commands, local PostgreSQL and old admin/secret matrices. The current deployment section above and linked runbook take precedence.
+
+> **Source retirement — 2026-11-20:** legacy Gateway/Telegraf, old Compose/Prometheus provisioning and unmounted management editors are deleted from current source. Historical instructions below are records only, not runnable installation paths. Existing live lab/data/secrets are unchanged. Use the [current AWS architecture](<../architecture/aws-ssm-cloudwatch.md>).
+
+
+The standalone AWS Compose used during this checkpoint is retired. Use the [ECS runbook](<aws-lab.md>) and [AWS architecture](<../architecture/aws-ssm-cloudwatch.md>) for current deployment. The historical source notes here are not commands to run.
+
+## Current composition and data policy
+
+Production main validates AWS context before reading DB/trust secrets and calls the same protected `createQualifiedRuntime` before listen. Missing real canonical inputs, bundle/published pins or full AWS context cannot become an inventory-only ready server. Agent TLS startup is removed; normal lifecycle/safe failure logs and separate identity/Management TLS trust remain.
+
+AppModule mounts auth, inventory/groups, audit and AWS onboarding, not public Profiles/Agents/Credentials/Provisioning/Gateway status modules. Immutable profile/version READ/FKs remain for AWS preset lookup. Current inventory projections contain onboarding/dashboard context, no Agent count/include. OS-change/archive Server-first locks and exact AWS terminal/idle guards remain; they no longer count Agents, inspect assignments, revoke keys or disable archived legacy Agents.
+
+All eight accepted migrations stay immutable/unapplied here. The additive ninth [190007 migration](<../../services/management-backend/prisma/migrations/202611190007_retire_legacy_telemetry/migration.sql>) is source only: runtime loses all legacy Agent/key/assignment/provisioning/Gateway table privileges and profile DML, but retains shared immutable preset SELECT. No rows/tables/FKs/published versions are dropped. Readiness requires complete final migration history and the final privilege policy; it preserves protected 004/005 column/function checks and 006 operator boundaries. Bootstrap validates that same final policy when installed, and excludes all protected receipt/provenance columns from ordinary runtime-write requirements. It never regrants retired capabilities to make a refresh pass.
+
+## Public input / protected-file matrix
+
+Public input means reviewed configuration, not credential contents. No root legacy dotenv injection, static AWS access keys, host AWS credential mount, browser credentials or runtime owner/Admin fallback.
+
+| Input | Current authority / boundary |
+| --- | --- |
+| Account/region/deployment/Owner | Exact reviewed outputs: Singapore, one account/deployment; Owner propagated, not a browser override |
+| Hybrid role/eligibility/namespace | Reviewed fixed role, deployment eligibility and `InfraPulse/Lab` |
+| Configure/Decommission/preset names + versions | Actual immutable published service versions, never defaults or latest |
+| Association ID/version, bundle hash | Actual reviewed current association and canonical bundled bytes |
+| Linux/Windows preset DB version UUIDs | Committed owner seed output bound to canonical version/hash, not fabricated UUIDs |
+| Grafana issuer/JWKS/org/namespace/auth methods/context | Actual enrolled instance, experimental identity acknowledgement; not token claims as config |
+| Image/release/target metadata | Reviewed public build/release/target inputs and actual role digests; no package/deploy existence inferred |
+
+Linux host secrets live outside checkout under `/etc/infrapulse/<deployment_id>/secrets`, selected by role subdirectory. No parent directory mount. `0400`/`0600` and actual image UID readability are source custody requirements, not a Windows ACL equivalence claim. Existing Windows permissions are accepted; this task starts no new ACL/backup workflow.
+
+| Consumer | Host role files → fixed container files | Never mounted |
+| --- | --- | --- |
+| Management UID10002 | `runtime/management-db-url` → `/run/secrets/management-db-url`; `runtime/assertion-trust` → `/run/secrets/assertion-trust` (public Ed25519 trust) | owner/bootstrap/alert DB, private assertion key, service trust, Grafana Admin |
+| PostgreSQL UID999 | `postgres/postgres-password` → `/run/secrets/postgres-password` | application/Admin keys |
+| Grafana + Go UID472 | `grafana/assertion-key` → `/run/secrets/assertion-key` | Grafana Admin and all DB URLs |
+| Explicit bootstrap UID10002 | `bootstrap/{bootstrap-db-url,owner-db-url,management-db-url,alert-db-url}` → matching `/run/secrets/*` | Grafana Admin/private assertion key |
+| Explicit migrate / seed UID10002 | `owner/owner-db-url` → `/run/secrets/owner-db-url` | runtime/alert/Admin/private assertion key |
+| Explicit alert-sync UID10002 | `alert/{alert-db-url,grafana-admin}` → matching `/run/secrets/*` | owner/bootstrap/private assertion key |
+
+Grafana user initialization is separate and stopped/removed at enrolled handoff; normal app runtime has no Admin secret. Operator alert-sync resolves the exact owned PostgreSQL bridge endpoint on each invocation; no published 5432 or hardcoded substitute. SDK EC2 default credentials require actual IMDSv2 qualification in both containers; shared host authority is explicitly **not container IAM isolation**.
+
+## Explicit setup sequence — future permission only
+
+The finite staged executor separates preflight/create-once secrets, PostgreSQL, fresh-owned-DB preparation, bootstrap, migrate, canonical seed, Grafana initialization, identity enrollment, start, operator alert sync and observation. Each stage needs its own matching permission; this document does not activate a chain. Bootstrap validates/creates only the dedicated marked DB roles; migration uses owner; seed imports genuine canonical release inputs and returns committed immutable preset UUID/hash mapping. None runs at app startup, overwrites historical published versions or regenerates credentials on rerun. Existing incompatible/foreign state fails closed rather than reset/adopt. Full fresh history→final grants/seed/readiness is **NOT RUN**.
+
+## HISTORICAL — previous management lab runbook (not current commands)
+
+Everything below, including Task12/13 tests, Gateway trust, legacy seed, prior acceptance and command blocks, is retained historical material. It is not the current AWS file matrix, a supported dual mode or AWS proof. Do not execute it for the new deployment or old lab.
 
 This is an **operator procedure, not authorization to execute it**. Task 12 uses only a disposable, uniquely labelled PostgreSQL 18.6 test stack. The existing shared PostgreSQL/Grafana/Prometheus/Gateway stack must not be bootstrapped, migrated, seeded, or restarted without a separate approved change window, operator-provided files, and verified backup. Shared rollout is NOT RUN by this task.
 
@@ -6,7 +78,7 @@ HTTP is permitted here only for the loopback/private Docker lab. Ed25519 signatu
 
 ## Artifacts and boundaries
 
-- [Compose](../../deploy/compose/compose.yaml) preserves the original three services, three named volumes, Prometheus receiver/storage and networks. Management listens internally on 3000 and publishes only `127.0.0.1:${MANAGEMENT_HOST_PORT:-3001}:3000`; Grafana 3000 and Gateway 8000 stay unchanged.
+- Compose (`../../deploy/compose/compose.yaml`, retired source) preserves the original three services, three named volumes, Prometheus receiver/storage and networks. Management listens internally on 3000 and publishes only `127.0.0.1:${MANAGEMENT_HOST_PORT:-3001}:3000`; Grafana 3000 and Gateway 8000 stay unchanged.
 - Management joins `monitoring` and `database`; Gateway joins **only** `monitoring`. PostgreSQL joins only `database` in the root deployment. No Docker socket is mounted.
 - [Dockerfile](../../services/management-backend/Dockerfile) defaults to `runtime`, Node 24.20.0's pinned linux/amd64 child digest, UID/GID 10002. `build` installs pnpm 11.24.0 and the frozen lock/workspace policy, generates Prisma offline, then compiles `dist/main.js`. `test` and `migrate` are explicit targets. Gateway keeps UID 10001.
 - Runtime contains only compiled application/generated Prisma assets, production dependencies and package metadata. It does not contain tests, source, operations, Prisma CLI, TypeScript compiler, signing keys, or test private fixtures. Never copy host node_modules or generated output into a build context.

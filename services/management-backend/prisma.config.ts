@@ -1,10 +1,9 @@
 import { defineConfig } from 'prisma/config';
 
-// Code generation/validation are offline. Only the migration wrapper supplies a URL.
+const url = process.env.DATABASE_URL || process.env.PRISMA_MIGRATION_URL;
+
+// Code generation/validation are offline. Supply DATABASE_URL for db push or migrations.
 export default defineConfig({
   schema: 'prisma/schema.prisma',
-  migrations: { path: 'prisma/migrations' },
-  ...(process.env.PRISMA_MIGRATION_URL
-    ? { datasource: { url: process.env.PRISMA_MIGRATION_URL } }
-    : {}),
+  ...(url ? { datasource: { url } } : {}),
 });

@@ -1,6 +1,14 @@
-# Bước 5 — Grafana dashboards và basic alerting
+# Grafana monitoring — AWS hiện hành
 
-## Trạng thái và phạm vi
+- **Tổng quan VM** (`infrapulse-fleet`) đọc inventory qua cùng Management API được phân quyền. VM trùng tên vẫn có UUID riêng. Bảng có cả VM chưa có metrics; `Metrics` mở đúng VM và giữ khoảng thời gian, `Setup` mở onboarding. Nếu inventory không đầy đủ, không hiển thị tổng số như thể đã đọc đủ.
+- **Chi tiết VM** (`infrapulse-linux-host`) có dropdown một VM. Binding lấy lại từ Management, không nhận node/enrollment/resource từ URL. Ba stat CPU/RAM/root filesystem chỉ hiển thị mẫu trong 5 phút gần nhất; bốn biểu đồ giữ khoảng trống khi thiếu dữ liệu. Network RX/TX đọc nguyên metric/statistic đã phát hành; chưa xác minh độc lập đơn vị B/s. Không cấp dashboard Windows khi chưa có phần hỗ trợ tương ứng. Nếu không có Linux release, trình biên dịch dashboard chỉ xuất Tổng quan; dùng cùng release cho lần publish dashboard và Management để liên kết Metrics không trỏ vào dashboard chưa được cài.
+- [Biên dịch canonical](<../../deploy/scripts/build-cloudwatch-dashboards.mjs>) từ [release](<../../deploy/agent-release.json>) và [templates](<../../observability/grafana/dashboards/infrapulse/>). Chỉ hai JSON dashboard được provision ở release hiện tại; manifest và mẫu gốc không được nạp. [Runbook S3 Files trên ECS](<aws-lab.md#dashboard-storage-on-ecs-optional>) tách cập nhật JSON khỏi build image sau lần rollout image tương thích đầu tiên. Không thay đổi alert-sync. Chưa xác minh dữ liệu AWS thật hay mount ECS trong công việc này.
+
+## Lịch sử — Bước 5 Prometheus/Telegraf (không dùng để triển khai)
+
+Nội dung còn lại lưu lại provenance và kết quả lab cũ. Các lệnh và đường dẫn stack cũ không áp dụng cho source AWS hiện hành.
+
+### Trạng thái và phạm vi lịch sử
 
 Đã triển khai cấu hình **hai dashboard** và **bốn Grafana-managed alert rules** cho stack hiện có: Grafana 13.3.0, Prometheus 3.13.5 và Telegraf 1.38.2. Lần implementation ban đầu chỉ kiểm tra tĩnh, không chạy E2E hoặc thay VM.
 
@@ -17,8 +25,8 @@ Không thêm Custom App Plugin, exporter, InfluxDB, AIOps, recording-rule pipeli
 
 Đã mở trực tiếp hai trang catalog và tải JSON revision 1 từ các link chính thức [Linux](https://grafana.com/api/dashboards/14396/revisions/1/download), [Windows](https://grafana.com/api/dashboards/3563/revisions/1/download). JSON public đối chiếu **bằng nội dung JSON** với hai bản bạn tải; không sửa bản gốc:
 
-- [Linux nguyên bản](<../../observability/grafana/dashboards/system-metrics-for-the-linux-hosts_rev1.json>), SHA-256 tại thời điểm khảo sát: `334077fd9894fc0c902a877ce6f8fe7c63e9d889412c947e3c59ed1a31cc5da0`.
-- [Windows nguyên bản](<../../observability/grafana/dashboards/windows-host-overview_rev1.json>), SHA-256: `2718750a3fdefbd6f1288922ac12e734fdb6bb4558e5b47dd7704d3ef2dd0c5b`.
+- [Linux nguyên bản](<../archive/grafana-dashboards/system-metrics-for-the-linux-hosts_rev1.json>), SHA-256 tại thời điểm khảo sát: `334077fd9894fc0c902a877ce6f8fe7c63e9d889412c947e3c59ed1a31cc5da0`.
+- [Windows nguyên bản](<../archive/grafana-dashboards/windows-host-overview_rev1.json>), SHA-256: `2718750a3fdefbd6f1288922ac12e734fdb6bb4558e5b47dd7704d3ef2dd0c5b`.
 
 Bản thích nghi nằm trong thư mục con riêng; provider **không tự import hai bản gốc**. Đây là nâng cấp/thu gọn hai dashboard public, không phải thêm dashboard chính thứ ba. Các phiên bản Grafana trên chỉ là provenance: không có tuyên bố rằng JSON legacy import nguyên trạng vào Grafana 13 sẽ hoạt động.
 

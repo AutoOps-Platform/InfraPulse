@@ -1,0 +1,6 @@
+{
+  "format": "infrapulse-inventory-template-v1",
+  "uid": "infrapulse-fleet",
+  "title": "Tổng quan VM",
+  "description": "Danh sách VM chưa archive và trạng thái metrics đã quan sát từ Management. Unknown không có nghĩa là Offline."
+}

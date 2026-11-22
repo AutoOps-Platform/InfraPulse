@@ -1,0 +1,9 @@
+apiVersion: 1
+
+datasources:
+  - name: InfraPulse Inventory
+    uid: infrapulse-inventory
+    type: infrapulse-inventory-datasource
+    orgId: ${INFRAPULSE_GRAFANA_ORG_ID}
+    access: proxy
+    editable: false

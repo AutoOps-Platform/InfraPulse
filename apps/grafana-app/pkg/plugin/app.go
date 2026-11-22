@@ -83,14 +83,6 @@ func (a *App) CallResource(ctx context.Context, req *backend.CallResourceRequest
 		}
 		return failure(sender, 401, "unauthorized")
 	}
-	path := strings.TrimPrefix(req.Path, "/")
-	if path == "settings" && req.Method == "GET" && len(req.Body) == 0 && !strings.Contains(req.URL, "?") {
-		data, _ := json.Marshal(a.cfg.Public)
-		return send(sender, 200, data)
-	}
-	if path == "provisioning" && req.Method == "POST" && !strings.Contains(req.URL, "?") {
-		return a.previewProvisioning(ctx, actor, req.Body, sender)
-	}
 	target, err := managementTarget(req.Method, req.URL, req.Path)
 	if err != nil {
 		return failure(sender, 400, "unsupported_resource")
@@ -99,6 +91,21 @@ func (a *App) CallResource(ctx context.Context, req *backend.CallResourceRequest
 		return failure(sender, 400, "invalid_request")
 	}
 	if len(req.Body) > 0 && !json.Valid(req.Body) {
+		return failure(sender, 400, "invalid_request")
+	}
+	if req.Method == "POST" && bootstrapAttachmentPath.MatchString(target) {
+		if len(req.Body) == 0 {
+			return failure(sender, 400, "invalid_request")
+		}
+		response, err := a.managementAttachment(ctx, actor, target, req.Body)
+		if err != nil {
+			// A lost response is an unknown outcome, never permission to replay the POST.
+			// The caller must inspect GET onboarding progress before any explicit intent.
+			return failure(sender, 503, "management_unavailable")
+		}
+		return sender.Send(response)
+	}
+	if req.Method == "POST" && bootstrapLinkPath.MatchString(target) && len(req.Body) == 0 {
 		return failure(sender, 400, "invalid_request")
 	}
 	status, data, err := a.management(ctx, actor, req.Method, target, req.Body, "")
@@ -131,12 +138,16 @@ func (a *App) management(ctx context.Context, actor Identity, method, target str
 	if err != nil {
 		return 0, nil, errors.New("management_unavailable")
 	}
-	authorization := agentKey
-	if agentKey == "" {
-		authorization, err = a.assertion(actor, method, out.URL.RequestURI(), body)
-		if err != nil {
-			return 0, nil, err
-		}
+	if method == "POST" && bootstrapLinkPath.MatchString(target) {
+		out.GetBody = nil
+	}
+	// Retained parameter shape for archival callers; Agent keys are never sent.
+	if agentKey != "" {
+		return 0, nil, errors.New("unsupported_resource")
+	}
+	authorization, err := a.assertion(actor, method, out.URL.RequestURI(), body)
+	if err != nil {
+		return 0, nil, err
 	}
 	out.Header.Set("Authorization", "Bearer "+authorization)
 	out.Header.Set("Accept", "application/json")
@@ -179,20 +190,6 @@ func safeError(raw []byte) []byte {
 			result[key] = payload[key]
 		}
 	}
-	var code string
-	_ = json.Unmarshal(result["code"], &code)
-	if code == "secret_already_issued" {
-		var original map[string]json.RawMessage
-		if json.Unmarshal(payload["credential"], &original) == nil {
-			safe := map[string]json.RawMessage{}
-			for _, key := range []string{"id", "agent_id", "server_id", "public_prefix", "scopes", "expires_at", "retire_at", "revoked_at", "rotated_from_id", "issuance_request_id", "created_at", "status"} {
-				if value, ok := original[key]; ok {
-					safe[key] = value
-				}
-			}
-			result["credential"], _ = json.Marshal(safe)
-		}
-	}
 	if len(result) == 0 {
 		return []byte(`{"code":"request_failed"}`)
 	}
@@ -210,64 +207,8 @@ func regexpCode(value string) bool {
 	}
 	return true
 }
-func (a *App) previewProvisioning(ctx context.Context, actor Identity, body []byte, sender backend.CallResourceResponseSender) error {
-	// This resource is the only key-bearing request. It requires a current Nest Admin
-	// decision first; frontend visibility or a Grafana role alone is not authorization.
-	status, me, err := a.management(ctx, actor, "GET", "/api/v1/me", nil, "")
-	if err != nil {
-		return failure(sender, 503, "management_unavailable")
-	}
-	if status != 200 {
-		return send(sender, status, me)
-	}
-	var principal struct {
-		Role string `json:"role"`
-	}
-	if json.Unmarshal(me, &principal) != nil {
-		return failure(sender, 502, "invalid_upstream_response")
-	}
-	if principal.Role != "Admin" {
-		return failure(sender, 403, "forbidden")
-	}
-	var input struct {
-		APIKey   string `json:"api_key"`
-		ServerID string `json:"server_id"`
-		AgentID  string `json:"agent_id"`
-	}
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.DisallowUnknownFields()
-	if len(body) > 1024 || decoder.Decode(&input) != nil || decoder.Decode(&struct{}{}) != io.EOF || !canonicalUUID.MatchString(input.ServerID) || !canonicalUUID.MatchString(input.AgentID) || !validAPIKey(input.APIKey) {
-		return failure(sender, 400, "invalid_request")
-	}
-	status, data, err := a.management(ctx, actor, "GET", "/api/v1/agent/provisioning", nil, input.APIKey)
-	input.APIKey = ""
-	if err != nil {
-		return failure(sender, 503, "management_unavailable")
-	}
-	if status != 200 {
-		return send(sender, status, data)
-	}
-	var provision struct {
-		ServerID  string `json:"server_id"`
-		AgentID   string `json:"agent_id"`
-		Ingestion struct {
-			BaseURL string `json:"base_url"`
-		} `json:"ingestion"`
-	}
-	if json.Unmarshal(data, &provision) != nil || provision.ServerID != input.ServerID || provision.AgentID != input.AgentID {
-		return failure(sender, 502, "provisioning_binding_mismatch")
-	}
-	origin, err := trustedURL(provision.Ingestion.BaseURL, false, false)
-	if err != nil || origin.Scheme != "https" || origin.String() != a.cfg.Public.GatewayOrigin {
-		return failure(sender, 502, "provisioning_origin_mismatch")
-	}
-	return send(sender, 200, data)
-}
-func validAPIKey(value string) bool {
-	parts := strings.Split(value, ".")
-	if len(parts) != 2 || !canonicalUUID.MatchString(parts[0]) || len(parts[1]) != 43 {
-		return false
-	}
-	decoded, err := base64.RawURLEncoding.DecodeString(parts[1])
-	return err == nil && len(decoded) == 32 && base64.RawURLEncoding.EncodeToString(decoded) == parts[1]
+// ARCHIVAL symbol retained for historical source-shape compatibility only; no
+// route or key-bearing transport remains. AWS uses managementAttachment instead.
+func (a *App) previewProvisioning(_ context.Context, _ Identity, _ []byte, sender backend.CallResourceResponseSender) error {
+	return failure(sender, 400, "unsupported_resource")
 }

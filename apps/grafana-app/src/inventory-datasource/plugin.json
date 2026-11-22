@@ -1,0 +1,14 @@
+{
+  "$schema": "https://raw.githubusercontent.com/grafana/grafana/main/docs/sources/developers/plugins/plugin.schema.json",
+  "type": "datasource",
+  "name": "InfraPulse Inventory",
+  "id": "infrapulse-inventory-datasource",
+  "metrics": true,
+  "info": {
+    "description": "Read-only VM inventory for InfraPulse dashboards",
+    "author": { "name": "InfraPulse" },
+    "version": "%VERSION%",
+    "logos": { "small": "/public/img/grafana_icon.svg", "large": "/public/img/grafana_icon.svg" }
+  },
+  "dependencies": { "grafanaDependency": ">=13.3.0 <13.4.0", "plugins": [] }
+}

@@ -1,0 +1,533 @@
+{
+  "platforms": {
+    "linux": {
+      "alloy": {
+        "sha256": "62d177feb18c9b6ffd636c8273aa82a6afc75a507d096ff951749df23c3176f9",
+        "url": "https://github.com/grafana/alloy/releases/download/v1.22.0/alloy-linux-amd64.zip",
+        "version": "1.22.0"
+      },
+      "amp": {
+        "region": "ap-southeast-1",
+        "remoteWriteUrl": "https://aps-workspaces.ap-southeast-1.amazonaws.com/workspaces/ws-3db7fbfa-f694-41f9-a077-a1d2cc1cef0d/api/v1/remote_write",
+        "workspaceId": "ws-3db7fbfa-f694-41f9-a077-a1d2cc1cef0d"
+      },
+      "configuration": {
+        "plugins": [
+          {
+            "measurements": [
+              {
+                "input": "node_cpu_seconds_total",
+                "metricKeys": [
+                  "cpu_busy"
+                ]
+              }
+            ],
+            "plugin": "cpu",
+            "resources": [
+              {
+                "dimensions": [
+                  {
+                    "name": "collector",
+                    "value": "unix"
+                  }
+                ],
+                "id": "cpu_total",
+                "kind": "cpu",
+                "selector": "unix"
+              }
+            ]
+          },
+          {
+            "measurements": [
+              {
+                "input": "node_memory_MemAvailable_bytes",
+                "metricKeys": [
+                  "memory_used"
+                ]
+              }
+            ],
+            "plugin": "mem",
+            "resources": [
+              {
+                "dimensions": [
+                  {
+                    "name": "collector",
+                    "value": "unix"
+                  }
+                ],
+                "id": "memory",
+                "kind": "memory",
+                "selector": "unix"
+              }
+            ]
+          },
+          {
+            "measurements": [
+              {
+                "input": "node_filesystem_avail_bytes",
+                "metricKeys": [
+                  "disk_used"
+                ]
+              }
+            ],
+            "plugin": "disk",
+            "resources": [
+              {
+                "dimensions": [
+                  {
+                    "name": "collector",
+                    "value": "unix"
+                  }
+                ],
+                "id": "root_disk",
+                "kind": "filesystem",
+                "selector": "unix"
+              }
+            ]
+          },
+          {
+            "measurements": [
+              {
+                "input": "node_network_receive_bytes_total",
+                "metricKeys": [
+                  "network_received"
+                ]
+              }
+            ],
+            "plugin": "net",
+            "resources": [
+              {
+                "dimensions": [
+                  {
+                    "name": "collector",
+                    "value": "unix"
+                  }
+                ],
+                "id": "primary_nic",
+                "kind": "interface",
+                "selector": "unix"
+              }
+            ]
+          }
+        ]
+      },
+      "helper": {
+        "sha256": "5bb23142d7c3cf03c1270ac019f37229a218135d5fbd24c9ce62cb9d3268e66f",
+        "signer": null,
+        "url": "https://amazon-ssm-ap-southeast-1.s3.ap-southeast-1.amazonaws.com/latest/debian_amd64/ssm-setup-cli",
+        "version": "sha256:5bb23142d7c3cf03c1270ac019f37229a218135d5fbd24c9ce62cb9d3268e66f"
+      },
+      "metrics": [
+        {
+          "aggregation": [
+            "Average"
+          ],
+          "dimensions": [
+            {
+              "name": "EnrollmentId",
+              "value": "${EnrollmentId}"
+            },
+            {
+              "name": "ManagedNodeId",
+              "value": "${ManagedNodeId}"
+            },
+            {
+              "name": "ServerId",
+              "value": "${ServerId}"
+            },
+            {
+              "name": "collector",
+              "value": "${native.cpu_total.collector}"
+            }
+          ],
+          "group": "cpu",
+          "key": "cpu_busy",
+          "metricName": "node_cpu_seconds_total",
+          "namespace": "InfraPulse/AMP",
+          "periodSeconds": 60,
+          "resourceId": "cpu_total",
+          "semantics": "counter",
+          "statistic": "Average",
+          "unit": "Count"
+        },
+        {
+          "aggregation": [
+            "Average"
+          ],
+          "dimensions": [
+            {
+              "name": "EnrollmentId",
+              "value": "${EnrollmentId}"
+            },
+            {
+              "name": "ManagedNodeId",
+              "value": "${ManagedNodeId}"
+            },
+            {
+              "name": "ServerId",
+              "value": "${ServerId}"
+            },
+            {
+              "name": "collector",
+              "value": "${native.memory.collector}"
+            }
+          ],
+          "group": "memory",
+          "key": "memory_used",
+          "metricName": "node_memory_MemAvailable_bytes",
+          "namespace": "InfraPulse/AMP",
+          "periodSeconds": 60,
+          "resourceId": "memory",
+          "semantics": "gauge",
+          "statistic": "Average",
+          "unit": "Bytes"
+        },
+        {
+          "aggregation": [
+            "Average"
+          ],
+          "dimensions": [
+            {
+              "name": "EnrollmentId",
+              "value": "${EnrollmentId}"
+            },
+            {
+              "name": "ManagedNodeId",
+              "value": "${ManagedNodeId}"
+            },
+            {
+              "name": "ServerId",
+              "value": "${ServerId}"
+            },
+            {
+              "name": "collector",
+              "value": "${native.root_disk.collector}"
+            }
+          ],
+          "group": "disk",
+          "key": "disk_used",
+          "metricName": "node_filesystem_avail_bytes",
+          "namespace": "InfraPulse/AMP",
+          "periodSeconds": 60,
+          "resourceId": "root_disk",
+          "semantics": "gauge",
+          "statistic": "Average",
+          "unit": "Bytes"
+        },
+        {
+          "aggregation": [
+            "Average"
+          ],
+          "dimensions": [
+            {
+              "name": "EnrollmentId",
+              "value": "${EnrollmentId}"
+            },
+            {
+              "name": "ManagedNodeId",
+              "value": "${ManagedNodeId}"
+            },
+            {
+              "name": "ServerId",
+              "value": "${ServerId}"
+            },
+            {
+              "name": "collector",
+              "value": "${native.primary_nic.collector}"
+            }
+          ],
+          "group": "network",
+          "key": "network_received",
+          "metricName": "node_network_receive_bytes_total",
+          "namespace": "InfraPulse/AMP",
+          "periodSeconds": 60,
+          "resourceId": "primary_nic",
+          "semantics": "counter",
+          "statistic": "Average",
+          "unit": "Bytes"
+        }
+      ],
+      "parameter": {
+        "name": "/infrapulse/lab-20261118/presets/linux",
+        "sha256": "f1f1e965957c6b28a99d88d01702906d3ba3daeb0bb4499462a2d2cc9f47d771",
+        "tier": "Standard",
+        "version": 3
+      },
+      "revision": "ff5827219cf0522a87a71421ba167d063987eefacbab05faef795a7cc000af1d",
+      "ssm": {
+        "sha256": "7894f86a1d19dda791394ebc651daaa51d3d2c36a9d53a20f98adaf1b386d92f",
+        "signer": null,
+        "url": "https://amazon-ssm-ap-southeast-1.s3.ap-southeast-1.amazonaws.com/3.3.5828.0/debian_amd64/amazon-ssm-agent.deb",
+        "version": "3.3.5828.0"
+      }
+    },
+    "windows": {
+      "alloy": {
+        "sha256": "b3de884e65e8400cef1ee3079e99c6f2c125745723b40cb33236c63dd8029252",
+        "url": "https://github.com/grafana/alloy/releases/download/v1.22.0/alloy-installer-windows-amd64.exe.zip",
+        "version": "1.22.0"
+      },
+      "amp": {
+        "region": "ap-southeast-1",
+        "remoteWriteUrl": "https://aps-workspaces.ap-southeast-1.amazonaws.com/workspaces/ws-3db7fbfa-f694-41f9-a077-a1d2cc1cef0d/api/v1/remote_write",
+        "workspaceId": "ws-3db7fbfa-f694-41f9-a077-a1d2cc1cef0d"
+      },
+      "configuration": {
+        "plugins": [
+          {
+            "measurements": [
+              {
+                "input": "windows_cpu_time_total",
+                "metricKeys": [
+                  "cpu_busy"
+                ]
+              }
+            ],
+            "plugin": "Processor",
+            "resources": [
+              {
+                "dimensions": [
+                  {
+                    "name": "collector",
+                    "value": "windows"
+                  }
+                ],
+                "id": "cpu_total",
+                "kind": "cpu",
+                "selector": "windows"
+              }
+            ]
+          },
+          {
+            "measurements": [
+              {
+                "input": "windows_memory_available_bytes",
+                "metricKeys": [
+                  "memory_used"
+                ]
+              }
+            ],
+            "plugin": "Memory",
+            "resources": [
+              {
+                "dimensions": [
+                  {
+                    "name": "collector",
+                    "value": "windows"
+                  }
+                ],
+                "id": "memory",
+                "kind": "memory",
+                "selector": "windows"
+              }
+            ]
+          },
+          {
+            "measurements": [
+              {
+                "input": "windows_logical_disk_free_bytes",
+                "metricKeys": [
+                  "disk_free"
+                ]
+              }
+            ],
+            "plugin": "LogicalDisk",
+            "resources": [
+              {
+                "dimensions": [
+                  {
+                    "name": "collector",
+                    "value": "windows"
+                  }
+                ],
+                "id": "system_disk",
+                "kind": "filesystem",
+                "selector": "windows"
+              }
+            ]
+          },
+          {
+            "measurements": [
+              {
+                "input": "windows_net_bytes_received_total",
+                "metricKeys": [
+                  "network_received"
+                ]
+              }
+            ],
+            "plugin": "Network Interface",
+            "resources": [
+              {
+                "dimensions": [
+                  {
+                    "name": "collector",
+                    "value": "windows"
+                  }
+                ],
+                "id": "primary_nic",
+                "kind": "interface",
+                "selector": "windows"
+              }
+            ]
+          }
+        ]
+      },
+      "helper": {
+        "sha256": "b791e85605a030da3425204483d2832814c874273591a49b11ae0fc7c78ac4a2",
+        "signer": {
+          "certificateSha256": "9768284923675dbb89272d42c42c0fd601b6873a956d0ac88ab3f313ca342a67",
+          "subject": "Amazon.com Services LLC"
+        },
+        "url": "https://amazon-ssm-ap-southeast-1.s3.ap-southeast-1.amazonaws.com/latest/windows_amd64/ssm-setup-cli.exe",
+        "version": "sha256:b791e85605a030da3425204483d2832814c874273591a49b11ae0fc7c78ac4a2"
+      },
+      "metrics": [
+        {
+          "aggregation": [
+            "Average"
+          ],
+          "dimensions": [
+            {
+              "name": "EnrollmentId",
+              "value": "${EnrollmentId}"
+            },
+            {
+              "name": "ManagedNodeId",
+              "value": "${ManagedNodeId}"
+            },
+            {
+              "name": "ServerId",
+              "value": "${ServerId}"
+            },
+            {
+              "name": "collector",
+              "value": "${native.cpu_total.collector}"
+            }
+          ],
+          "group": "cpu",
+          "key": "cpu_busy",
+          "metricName": "windows_cpu_time_total",
+          "namespace": "InfraPulse/AMP",
+          "periodSeconds": 60,
+          "resourceId": "cpu_total",
+          "semantics": "counter",
+          "statistic": "Average",
+          "unit": "Count"
+        },
+        {
+          "aggregation": [
+            "Average"
+          ],
+          "dimensions": [
+            {
+              "name": "EnrollmentId",
+              "value": "${EnrollmentId}"
+            },
+            {
+              "name": "ManagedNodeId",
+              "value": "${ManagedNodeId}"
+            },
+            {
+              "name": "ServerId",
+              "value": "${ServerId}"
+            },
+            {
+              "name": "collector",
+              "value": "${native.memory.collector}"
+            }
+          ],
+          "group": "memory",
+          "key": "memory_used",
+          "metricName": "windows_memory_available_bytes",
+          "namespace": "InfraPulse/AMP",
+          "periodSeconds": 60,
+          "resourceId": "memory",
+          "semantics": "gauge",
+          "statistic": "Average",
+          "unit": "Bytes"
+        },
+        {
+          "aggregation": [
+            "Average"
+          ],
+          "dimensions": [
+            {
+              "name": "EnrollmentId",
+              "value": "${EnrollmentId}"
+            },
+            {
+              "name": "ManagedNodeId",
+              "value": "${ManagedNodeId}"
+            },
+            {
+              "name": "ServerId",
+              "value": "${ServerId}"
+            },
+            {
+              "name": "collector",
+              "value": "${native.system_disk.collector}"
+            }
+          ],
+          "group": "disk",
+          "key": "disk_free",
+          "metricName": "windows_logical_disk_free_bytes",
+          "namespace": "InfraPulse/AMP",
+          "periodSeconds": 60,
+          "resourceId": "system_disk",
+          "semantics": "gauge",
+          "statistic": "Average",
+          "unit": "Bytes"
+        },
+        {
+          "aggregation": [
+            "Average"
+          ],
+          "dimensions": [
+            {
+              "name": "EnrollmentId",
+              "value": "${EnrollmentId}"
+            },
+            {
+              "name": "ManagedNodeId",
+              "value": "${ManagedNodeId}"
+            },
+            {
+              "name": "ServerId",
+              "value": "${ServerId}"
+            },
+            {
+              "name": "collector",
+              "value": "${native.primary_nic.collector}"
+            }
+          ],
+          "group": "network",
+          "key": "network_received",
+          "metricName": "windows_net_bytes_received_total",
+          "namespace": "InfraPulse/AMP",
+          "periodSeconds": 60,
+          "resourceId": "primary_nic",
+          "semantics": "counter",
+          "statistic": "Average",
+          "unit": "Bytes"
+        }
+      ],
+      "parameter": {
+        "name": "/infrapulse/lab-20261118/presets/windows",
+        "sha256": "cc1dba636d143081a6d646c8f3446c72ee2ae02d718eeceab10916ae2624804d",
+        "tier": "Standard",
+        "version": 2
+      },
+      "revision": "dbc76853efc20805bd331b8e3af95b79407d0c835b0103c483c1ab75cd1f0b27",
+      "ssm": {
+        "sha256": "e216f63ef75822f6bec245d796db4a1da7c0a5985ec5f6881980ec9513075f25",
+        "signer": {
+          "certificateSha256": "9768284923675dbb89272d42c42c0fd601b6873a956d0ac88ab3f313ca342a67",
+          "subject": "Amazon.com Services LLC"
+        },
+        "url": "https://amazon-ssm-ap-southeast-1.s3.ap-southeast-1.amazonaws.com/3.3.5828.0/windows_amd64/AmazonSSMAgentSetup.exe",
+        "version": "3.3.5828.0"
+      }
+    }
+  },
+  "schemaVersion": 1
+}

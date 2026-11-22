@@ -6,26 +6,28 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  schemas  = ["management"]
 }
 
 model Server {
-  id          String              @id @db.Uuid
-  name        String              @db.VarChar(128)
-  os          String              @db.VarChar(16)
-  environment String              @db.VarChar(128)
-  metadata    Json                @default("{}") @db.JsonB
-  created_at  DateTime            @default(now()) @db.Timestamptz(6)
-  updated_at  DateTime            @default(now()) @db.Timestamptz(6)
-  archived_at DateTime?           @db.Timestamptz(6)
-  agents      Agent[]
-  memberships ServerGroupMember[]
-  profile     ServerProfile?
+  id                    String               @id @db.Uuid
+  name                  String               @db.VarChar(128)
+  os                    String               @db.VarChar(16)
+  environment           String               @db.VarChar(128)
+  metadata              Json                 @default("{}") @db.JsonB
+  created_at            DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime             @default(now()) @db.Timestamptz(6)
+  archived_at           DateTime?            @db.Timestamptz(6)
+  agents                Agent[]
+  memberships           ServerGroupMember[]
+  profile               ServerProfile?
+  onboarding_state      String               @default("Pending") @db.VarChar(16)
+  onboarding_generation Int                  @default(0)
+  onboarding_attempts   OnboardingAttempt[]
+  managed_node_bindings ManagedNodeBinding[]
 
   @@index([archived_at, created_at, id], map: "servers_archive_created_id_idx")
   @@index([environment, os], map: "servers_environment_os_idx")
   @@map("servers")
-  @@schema("management")
 }
 
 model ServerGroup {
@@ -37,7 +39,6 @@ model ServerGroup {
   memberships ServerGroupMember[]
 
   @@map("server_groups")
-  @@schema("management")
 }
 
 model ServerGroupMember {
@@ -49,7 +50,6 @@ model ServerGroupMember {
   @@id([server_id, group_id])
   @@index([group_id], map: "server_group_members_group_idx")
   @@map("server_group_members")
-  @@schema("management")
 }
 
 model Agent {
@@ -78,7 +78,6 @@ model Agent {
   @@index([server_id, lifecycle], map: "agents_server_lifecycle_idx")
   @@index([last_applied_profile_version_id], map: "agents_applied_version_idx")
   @@map("agents")
-  @@schema("management")
 }
 
 model ApiCredential {
@@ -102,7 +101,6 @@ model ApiCredential {
   @@index([agent_id, created_at], map: "api_credentials_agent_created_idx")
   @@index([expires_at, retire_at, revoked_at], map: "api_credentials_expiry_retire_revoke_idx")
   @@map("api_credentials")
-  @@schema("management")
 }
 
 model MonitoringProfile {
@@ -117,7 +115,6 @@ model MonitoringProfile {
   versions    ProfileVersion[]
 
   @@map("monitoring_profiles")
-  @@schema("management")
 }
 
 model ProfileVersion {
@@ -135,9 +132,12 @@ model ProfileVersion {
   agents       Agent[]
   receipts     AgentProvisioningReceipt[]
 
+  onboarding_attempts   OnboardingAttempt[]
+  managed_node_bindings ManagedNodeBinding[]
+
+  @@unique([id, checksum], map: "profile_versions_id_checksum_key")
   @@unique([profile_id, version], map: "profile_versions_profile_version_key")
   @@map("profile_versions")
-  @@schema("management")
 }
 
 model ServerProfile {
@@ -150,7 +150,6 @@ model ServerProfile {
 
   @@index([profile_version_id], map: "server_profiles_version_idx")
   @@map("server_profiles")
-  @@schema("management")
 }
 
 model AgentProvisioningReceipt {
@@ -165,7 +164,6 @@ model AgentProvisioningReceipt {
   @@id([agent_id, profile_version_id])
   @@index([profile_version_id], map: "agent_provisioning_receipts_version_idx")
   @@map("agent_provisioning_receipts")
-  @@schema("management")
 }
 
 model AuditLog {
@@ -186,7 +184,6 @@ model AuditLog {
   @@index([resource_type, resource_id, created_at], map: "audit_logs_resource_created_idx")
   @@index([actor_issuer, actor_subject, created_at], map: "audit_logs_actor_created_idx")
   @@map("audit_logs")
-  @@schema("management")
 }
 
 model RequestNonce {
@@ -197,7 +194,145 @@ model RequestNonce {
   @@id([issuer, jti])
   @@index([expires_at], map: "request_nonces_expiry_idx")
   @@map("request_nonces")
-  @@schema("management")
+}
+
+model OnboardingAttempt {
+  id                        String               @id @db.Uuid
+  server_id                 String               @db.Uuid
+  enrollment_id             String               @db.Uuid
+  generation                Int
+  intent                    String               @db.VarChar(32)
+  actor_issuer              String               @db.VarChar(128)
+  actor_subject             String               @db.VarChar(128)
+  request_id                String               @db.Uuid
+  state                     String               @default("Pending") @db.VarChar(16)
+  stage                     String               @default("CreatingActivation") @db.VarChar(32)
+  activation_id             String?              @db.Uuid
+  activation_expires_at     DateTime?            @db.Timestamptz(6)
+  activation_limit          Int                  @default(1)
+  desired_preset_version_id String               @db.Uuid
+  desired_preset_hash       String               @db.Char(64)
+  // Current single-command protocol. Earlier proof columns below are immutable archives.
+  configuration_version     String?              @db.Char(64)
+  command_intent            Json?                @db.JsonB
+  command_observation       Json?                @db.JsonB
+  verified_observation      Json?                @db.JsonB
+  agent_metadata            Json?                @db.JsonB
+  association_id            String?              @db.Uuid
+  // Protected write-once actual N4 observer provenance; new migration only.
+  association_provenance    Json?                @db.JsonB
+  configure_dispatch_at     DateTime?            @db.Timestamptz(6)
+  configure_provenance      Json?                @db.JsonB
+  failed_operations        Json                 @default(dbgenerated("'[]'::jsonb")) @db.JsonB
+  config_receipt            Json?                @db.JsonB
+  // Guarded B5 canonical Verified projection; historical rows remain null.
+  verified_config_receipt   Json?                @db.JsonB
+  registered_at             DateTime?            @db.Timestamptz(6)
+  config_started_at         DateTime?            @db.Timestamptz(6)
+  config_applied_at         DateTime?            @db.Timestamptz(6)
+  registration_deadline     DateTime?            @db.Timestamptz(6)
+  configuration_deadline    DateTime?            @db.Timestamptz(6)
+  verification_deadline     DateTime?            @db.Timestamptz(6)
+  error_code                String?              @db.VarChar(32)
+  retry_count               Int                  @default(0)
+  retry_cursor              String?              @db.VarChar(1024)
+  next_run_at               DateTime?            @db.Timestamptz(6)
+  lease_owner               String?              @db.Uuid
+  lease_version             Int                  @default(0)
+  lease_expires_at          DateTime?            @db.Timestamptz(6)
+  created_at                DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at                DateTime             @default(now()) @db.Timestamptz(6)
+  server                    Server               @relation(fields: [server_id], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  preset                    ProfileVersion       @relation(fields: [desired_preset_version_id, desired_preset_hash], references: [id, checksum], onDelete: Restrict, onUpdate: Restrict, map: "onboarding_attempts_preset_fk")
+  bindings                  ManagedNodeBinding[]
+  request_receipts          OnboardingRequestReceipt[]
+  decommission_protocol     DecommissionProtocol?
+
+  @@unique([server_id, enrollment_id, generation], map: "onboarding_attempts_server_enrollment_generation_key")
+  @@unique([server_id, generation], map: "onboarding_attempts_server_generation_key")
+  @@unique([actor_issuer, actor_subject, request_id], map: "onboarding_attempts_actor_request_key")
+  @@index([next_run_at, lease_expires_at], map: "onboarding_attempts_work_idx")
+  @@map("onboarding_attempts")
+}
+
+// Nonsecret B6 checkpoints. Original operation IDs remain in immutable attempts.
+model DecommissionProtocol {
+  attempt_id              String            @id @db.Uuid
+  // Old phase/receipt columns are retained for historical readers only.
+  simple_phase            String?           @db.VarChar(32)
+  node_deregistered_at    DateTime?          @db.Timestamptz(6)
+  phase                   String            @default("ReadyEligibility") @db.VarChar(32)
+  deadline                DateTime          @db.Timestamptz(6)
+  eligibility_removed_at  DateTime?         @db.Timestamptz(6)
+  command_id              String?           @db.Uuid
+  stop_receipt            Json?             @db.JsonB
+  alert_removal_hash      String?           @db.Char(64)
+  deregistered_at         DateTime?         @db.Timestamptz(6)
+  attempt                 OnboardingAttempt @relation(fields: [attempt_id], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@map("decommission_protocol")
+}
+
+// Nonsecret append-only signed-request identity; never activation code or bytes.
+model OnboardingRequestReceipt {
+  actor_issuer  String            @db.VarChar(128)
+  actor_subject String            @db.VarChar(128)
+  request_id    String            @db.Uuid
+  attempt_id    String            @db.Uuid
+  intent        String            @db.VarChar(32)
+  created_at    DateTime          @default(now()) @db.Timestamptz(6)
+  attempt       OnboardingAttempt @relation(fields: [attempt_id], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  // The SQL partial unique index also permits only one bootstrap per attempt.
+  @@id([actor_issuer, actor_subject, request_id])
+  @@map("onboarding_request_receipts")
+}
+
+model ManagedNodeBinding {
+  id                        String               @id @db.Uuid
+  server_id                 String               @db.Uuid
+  account_id                String               @db.Char(12)
+  region                    String               @db.VarChar(32)
+  managed_node_id           String               @db.VarChar(32)
+  platform                  String               @db.VarChar(16)
+  enrollment_id             String               @db.Uuid
+  activation_id             String?              @db.Uuid
+  generation                Int
+  desired_preset_version_id String               @db.Uuid
+  desired_preset_hash       String               @db.Char(64)
+  state                     String               @default("Active") @db.VarChar(32)
+  monitoring_health         String               @default("Unknown") @db.VarChar(16)
+  last_observed_sample_at   DateTime?            @db.Timestamptz(6)
+  last_successful_query_at  DateTime?            @db.Timestamptz(6)
+  created_at                DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at                DateTime             @default(now()) @db.Timestamptz(6)
+  retired_at                DateTime?            @db.Timestamptz(6)
+  server                    Server               @relation(fields: [server_id], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  preset                    ProfileVersion       @relation(fields: [desired_preset_version_id, desired_preset_hash], references: [id, checksum], onDelete: Restrict, onUpdate: Restrict, map: "managed_node_bindings_preset_fk")
+  attempt                   OnboardingAttempt    @relation(fields: [server_id, enrollment_id, generation], references: [server_id, enrollment_id, generation], onDelete: Restrict, onUpdate: Restrict, map: "managed_node_bindings_attempt_fk")
+  alert_receipt             BindingAlertReceipt?
+
+  @@unique([account_id, region, managed_node_id], map: "managed_node_bindings_aws_node_key")
+  @@unique([id, generation], map: "managed_node_bindings_id_generation_key")
+  @@index([server_id, generation], map: "managed_node_bindings_server_generation_idx")
+  @@map("managed_node_bindings")
+}
+
+model BindingAlertReceipt {
+  binding_id   String             @id @db.Uuid
+  generation   Int
+  state        String             @default("Pending") @db.VarChar(16)
+  desired_hash String?            @db.Char(64)
+  owned_uids   String[]           @default([])
+  // Operator-only intent and bounded potential partial-remote-write obligations.
+  intent_uids  String[]           @default([])
+  reconciliation_uids String[]    @default([])
+  synced_at    DateTime?          @db.Timestamptz(6)
+  updated_at   DateTime           @default(now()) @db.Timestamptz(6)
+  binding      ManagedNodeBinding @relation(fields: [binding_id, generation], references: [id, generation], onDelete: Restrict, onUpdate: Cascade, map: "binding_alert_receipts_binding_fk")
+
+  @@unique([binding_id, generation], map: "binding_alert_receipts_binding_generation_key")
+  @@map("binding_alert_receipts")
 }
 
 model GatewaySource {
@@ -208,7 +343,6 @@ model GatewaySource {
   epochs        GatewayEpoch[]
 
   @@map("gateway_sources")
-  @@schema("management")
 }
 
 model GatewayEpoch {
@@ -236,5 +370,4 @@ model GatewayEpoch {
   @@id([gateway_id, epoch])
   @@unique([gateway_id, boot_id], map: "gateway_epochs_source_boot_key")
   @@map("gateway_epochs")
-  @@schema("management")
 }

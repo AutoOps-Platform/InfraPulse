@@ -1,6 +1,6 @@
 import React, { createContext, useContext } from 'react';
 import { Alert, Button, Field, Combobox, Spinner, useStyles2 } from '@grafana/ui';
-import type { Principal, Telemetry } from '../api/types';
+import type { Principal } from '../api/types';
 import { getStyles } from '../styles';
 
 export const PrincipalContext = createContext<Principal | undefined>(undefined);
@@ -109,25 +109,6 @@ export function Pager({
       <Button variant="secondary" disabled={loading || !nextCursor} onClick={next}>
         Next
       </Button>
-    </div>
-  );
-}
-export function TelemetryView({ telemetry }: { telemetry: Telemetry }) {
-  const s = useStyles2(getStyles);
-  return (
-    <div className={s.card}>
-      <strong>{telemetry.status}</strong>
-      <dl>
-        <dt>Source health</dt>
-        <dd>{telemetry.source_health}</dd>
-        <dt>Evidence as of</dt>
-        <dd>{time(telemetry.status_as_of)}</dd>
-        <dt>Last metric receipt</dt>
-        <dd>{time(telemetry.last_metric_seen_at)}</dd>
-        <dt>Confidence</dt>
-        <dd>{telemetry.confidence_reason}</dd>
-      </dl>
-      <p className={s.muted}>Observation only. Lifecycle is not Online; Offline is not a machine power-state claim.</p>
     </div>
   );
 }

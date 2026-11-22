@@ -8,6 +8,8 @@ import (
 )
 
 var uuidSegment = `[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`
+var bootstrapAttachmentPath = regexp.MustCompile(`^/api/v1/servers/(` + uuidSegment + `)/onboarding/bootstrap$`)
+var bootstrapLinkPath = regexp.MustCompile(`^/api/v1/servers/(` + uuidSegment + `)/onboarding/bootstrap-link$`)
 
 type allowedRoute struct {
 	method string
@@ -29,18 +31,12 @@ var managementRoutes = []allowedRoute{
 	route("GET", `/api/v1/me`),
 	route("GET", `/api/v1/servers`, "limit", "cursor", "name", "os", "environment", "group", "archive"),
 	route("POST", `/api/v1/servers`),
-	route("GET", `/api/v1/servers/`+uuidSegment), route("PATCH", `/api/v1/servers/`+uuidSegment), route("DELETE", `/api/v1/servers/`+uuidSegment),
-	route("POST", `/api/v1/servers/`+uuidSegment+`/agents`),
-	route("GET", `/api/v1/servers/`+uuidSegment+`/profile`), route("PUT", `/api/v1/servers/`+uuidSegment+`/profile`),
-	route("GET", `/api/v1/agents`, "limit", "cursor", "server", "lifecycle"), route("GET", `/api/v1/agents/`+uuidSegment),
-	route("POST", `/api/v1/agents/`+uuidSegment+`/(?:disable|enable|retire)`),
-	route("POST", `/api/v1/agents/`+uuidSegment+`/credentials`),
-	route("GET", `/api/v1/credentials`, "limit", "cursor", "agent", "server"), route("GET", `/api/v1/credentials/`+uuidSegment),
-	route("POST", `/api/v1/credentials/`+uuidSegment+`/(?:rotate|revoke)`),
-	route("GET", `/api/v1/monitoring-profiles`, "limit", "cursor", "os", "retired", "status"),
-	route("GET", `/api/v1/monitoring-profiles/`+uuidSegment),
-	route("GET", `/api/v1/monitoring-profiles/`+uuidSegment+`/versions`, "limit", "cursor", "status"),
-	route("GET", `/api/v1/profile-versions/`+uuidSegment),
+	route("GET", `/api/v1/servers/`+uuidSegment), route("PATCH", `/api/v1/servers/`+uuidSegment), route("DELETE", `/api/v1/servers/`+uuidSegment, "force"),
+	route("GET", `/api/v1/servers/`+uuidSegment+`/onboarding`),
+	route("POST", `/api/v1/servers/`+uuidSegment+`/onboarding/bootstrap`),
+	route("POST", `/api/v1/servers/`+uuidSegment+`/onboarding/bootstrap-link`),
+	route("POST", `/api/v1/servers/`+uuidSegment+`/onboarding/retry`),
+	route("POST", `/api/v1/servers/`+uuidSegment+`/decommission`),
 }
 
 func managementTarget(method, rawURL, resourcePath string) (string, error) {
@@ -54,6 +50,11 @@ func managementTarget(method, rawURL, resourcePath string) (string, error) {
 	}
 	path := "/" + strings.TrimPrefix(u.Path, "/")
 	if path != "/"+strings.TrimPrefix(resourcePath, "/") || strings.Contains(path, "//") || strings.Contains(path, "..") {
+		return "", bad
+	}
+	// The one-shot bootstrap endpoints have no query contract, including an empty
+	// delimiter or ignored separators that could bypass exact dispatch.
+	if (bootstrapAttachmentPath.MatchString(path) || bootstrapLinkPath.MatchString(path)) && (u.ForceQuery || u.RawQuery != "") {
 		return "", bad
 	}
 	q, err := url.ParseQuery(u.RawQuery)

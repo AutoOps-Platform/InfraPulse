@@ -1,6 +1,6 @@
 {
   "name": "infrapulse-infrapulse-app",
-  "version": "1.0.0",
+  "version": "1.2.1",
   "private": true,
   "description": "Grafana-native management UI and request-bound identity adapter for InfraPulse",
   "license": "Apache-2.0",
@@ -15,6 +15,7 @@
     "build:backend": "node scripts/build-backend.mjs",
     "check:backend": "go vet ./...",
     "test:backend": "go test ./...",
+    "test": "node --test tests/*.test.mjs",
     "test:deployment": "node --test tests/deployment.test.mjs",
     "sign": "sign-plugin"
   },

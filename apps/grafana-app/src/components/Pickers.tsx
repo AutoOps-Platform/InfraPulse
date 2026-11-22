@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Button, Field, Input, useStyles2 } from '@grafana/ui';
 import { api } from '../api/client';
-import type { Agent, Server } from '../api/types';
+import type { Server } from '../api/types';
 import { useCursor } from '../hooks/useApi';
-import { Choice, LoadState, Pager, Table } from './Common';
+import { Choice, LoadState, Pager } from './Common';
 import { getStyles } from '../styles';
 
 export function ServerPicker({
@@ -38,7 +38,7 @@ export function ServerPicker({
           options={[
             { label: 'Choose a Server', value: '' },
             ...(list.data?.items ?? []).map((server) => ({
-              label: `${server.name} · ${server.os} · ${server.id}`,
+              label: `${server.name} · ${server.os} · ${server.onboarding.state}/${server.onboarding.stage} · ${server.id}`,
               value: server.id,
             })),
           ]}
@@ -52,49 +52,6 @@ export function ServerPicker({
           <Button size="sm" variant="secondary" onClick={() => onChange(undefined)}>
             Clear Server
           </Button>
-        </p>
-      )}
-    </section>
-  );
-}
-export function AgentPicker({
-  server,
-  value,
-  onChange,
-  activeOnly = false,
-}: {
-  server: Server;
-  value?: Agent;
-  onChange: (agent: Agent | undefined) => void;
-  activeOnly?: boolean;
-}) {
-  const list = useCursor({ server: server.id, lifecycle: activeOnly ? 'active' : undefined }, api.agents);
-  return (
-    <section aria-label="Select authoritative Agent">
-      <h3>Agents for {server.name}</h3>
-      <LoadState {...list} empty={list.data?.items.length === 0}>
-        <Table
-          caption="Select an Agent returned by Management"
-          headings={['Agent ID', 'Lifecycle', 'Reported version', 'Select']}
-        >
-          {list.data?.items.map((agent) => (
-            <tr key={agent.id}>
-              <td>{agent.id}</td>
-              <td>{agent.lifecycle}</td>
-              <td>{agent.version ?? 'Not reported'}</td>
-              <td>
-                <Button size="sm" variant="secondary" onClick={() => onChange(agent)} disabled={value?.id === agent.id}>
-                  {value?.id === agent.id ? 'Selected' : 'Select'}
-                </Button>
-              </td>
-            </tr>
-          ))}
-        </Table>
-      </LoadState>
-      <Pager {...list} nextCursor={list.data?.next_cursor} />
-      {value && (
-        <p>
-          Selected Agent: {value.id} ({value.lifecycle})
         </p>
       )}
     </section>

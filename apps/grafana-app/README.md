@@ -1,48 +1,30 @@
 # InfraPulse Grafana App
 
-React/TypeScript App Plugin + Go resource adapter, đặt duy nhất tại `apps/grafana-app`. Không phải Admin Web riêng, datasource mới hoặc bộ biểu đồ mới.
+React/TypeScript app plugin plus Go resource adapter. This is Grafana-native UI, not a separate Admin Web or a custom datasource.
 
-## Chức năng
+## Current capabilities
 
-- Overview từ inventory thật: số Server theo trạng thái telemetry, Agent/lifecycle, độ đầy đủ và thời điểm quan sát. Scan phân trang có giới hạn và không phải snapshot transaction.
-- Servers: tìm theo **prefix tên** đúng API, lọc/phân trang cursor, tạo/sửa/chi tiết/archive có xác nhận.
-- Agents: Server liên kết, lifecycle, version do Agent báo cáo, last seen và chất lượng telemetry.
-- Install Agent: chọn Server/OS, đăng ký Agent, pin published profile, cấp key một lần, đọc provisioning thật và tạo hướng dẫn installer Windows/Linux hiện có.
-- API Keys: metadata Admin-only, cấp/rotate/revoke, operation UUID và xử lý kết quả không chắc chắn; secret chỉ trong modal tạm thời.
-- Monitoring Profiles: profile/version/config/checksum read-only, gán **đúng version** cho Server.
-- Monitoring: mở dashboard Bước 5 theo OS, truyền cả `server_id` và `agent_id`; không dựng chart React.
+- **Overview:** bounded current AWS inventory scan, onboarding stage, independent metrics health and alert-sync status.
+- **Servers:** literal name-prefix search, filters/cursor pagination, create/update/detail/archive with Management enforcing current AWS ownership and retirement guards.
+- **AWS onboarding:** select authoritative Server inventory, deliberately download one-time registration bootstrap, inspect persisted progress and request eligible recovery/decommission.
+- **AWS Monitoring:** open the OS CloudWatch dashboard using the protected current binding/resource projection, never a browser-inferred node identity or old Agent ID.
 
-## Bắt đầu
+The unmounted Agents/API Keys/Profiles editors, credential/provisioning modal chain, legacy client types/API methods and Telegraf installer instructions have been deleted. Retired URL notices remain; old backend endpoints are not re-enabled.
 
-Đọc [hướng dẫn triển khai](<../../docs/deployment/grafana-app.md>) trước khi bật plugin. Backend yêu cầu enrollment thật của Grafana instance/org, public admin trust trong NestJS và private key riêng ở runtime Grafana. Không đưa secret vào frontend hoặc build arguments.
+## Deployment and identity
+
+Use the [current deployment guide](<../../docs/deployment/grafana-app.md>), [AWS runbook](<../../docs/deployment/aws-lab.md>) and [current API contract](<../../docs/contracts/grafana-management-api.md>). The custom Grafana image owns plugin/backend/CloudWatch provisioning. Do not use the removed old dist-mount Compose overlay.
+
+Browser requests are same-origin. The Go adapter verifies the actual enrolled Grafana `X-Grafana-Id` identity and current PluginContext, then signs exact method/target/body assertions with a fresh nonce. NestJS remains the authentication, RBAC, validation and business authority. Viewer/Editor map to read-only Viewer/Operator; Admin mutations require actual verified Management Admin. No browser role, username or Admin fallback.
+
+Grafana 13.3 identity remains experimental upstream and requires deliberate acknowledgement/enrollment. Identity/Management TLS trust, bounded fixed-origin JWKS and private assertion-key custody remain unchanged. No Agent-key transport or Gateway origin is part of the current flow.
+
+## Local source commands
 
 ```sh
-cd apps/grafana-app
-pnpm install --frozen-lockfile
 pnpm typecheck
-pnpm lint
 pnpm build
-pnpm build:backend         # Linux amd64, Go >=1.26.5; đã dùng Go1.27.1
-# pnpm build:backend arm64 # target khác, cần kiểm thử trên runtime tương ứng
+pnpm build:backend
 ```
 
-Node24.x và pnpm11.24.0. Frontend dùng React19 theo peer requirement của Grafana13.3.0. Build config dựa trên **official `@grafana/create-plugin`7.17.0**, không dùng scaffold UI mẫu/mock trong production. Generator chính thức không hỗ trợ Windows native; đã tạo reference bằng Linux container cục bộ, còn compiler Node/Go có thể chạy tại host.
-
-Tùy chọn artifact build Linux (không khởi chạy Grafana):
-
-```sh
-cd apps/grafana-app
-docker build --platform linux/amd64 --target artifacts --output type=local,dest=dist .
-```
-
-Artifacts gồm `dist/module.js`, metadata/assets và `dist/gpx_infrapulse_linux_amd64`. Không commit artifacts, dependencies hoặc private key. Khi `pnpm dev` rebuild frontend, Go thay đổi phải build lại riêng. Go binary mới cần restart Grafana để nạp process mới; không tự hot-reload backend.
-
-## Auth không phải browser role
-
-Browser chỉ gọi cùng-origin `/api/plugins/infrapulse-infrapulse-app/resources/...`. Adapter xác minh **server-set `X-Grafana-Id` ES256 JWT** bằng JWKS của instance được enrollment; đối chiếu issuer/org/namespace/type/role và PluginContext. Subject là `user:<database ID>` đã xác minh, không username/email. Sau đó ký assertion **Ed25519 mới**, ràng buộc method, outbound target/query và raw body; NestJS vẫn quyết định authentication, RBAC, DTO, lifecycle và nghiệp vụ.
-
-**Giới hạn bắt buộc:** nguồn Grafana OSS13.3.0 vẫn đánh dấu signing-key service đang phát triển/chưa production-ready. Chế độ này phải opt-in rõ bằng `INFRAPULSE_ACCEPT_EXPERIMENTAL_IDENTITY=true`; đây không phải bằng chứng đã đạt production acceptance. Thiếu/không hợp lệ identity hoặc JWKS làm request thất bại đóng, không fallback. Database/instance replacement cần enrollment/context mới. Chi tiết, key rotation và HTTP development boundaries ở hướng dẫn triển khai.
-
-## Phạm vi xác minh
-
-Build/lint/typecheck và kiểm tra offline của adapter không chứng minh onboarding hoặc Grafana runtime. Sau khi người dùng cho phép lab riêng, đã có [bằng chứng E2E Linux/UI/API](<../../docs/testing/grafana-app-vm1-20261103.md>), nhưng **recovery/teardown còn chờ operator, Windows PDH/service và production acceptance chưa hoàn tất**. Xem [checklist](<../../docs/testing/grafana-app-checklist.md>). Không dùng dữ liệu mock thay API trong ứng dụng. Tests crypto/HTTP transport của Go là kiểm tra offline; không gọi đó là Agent E2E.
+Use the existing pinned Node/pnpm/Go toolchain. Generated frontend assets and the Linux Go binary are packaged by the current two-image build flow. Type checking/building is not browser, deployed-identity, AWS or native qualification. Historical [Linux/UI lab evidence](<../../docs/testing/grafana-app-vm1-20261103.md>) remains historical only.

@@ -43,3 +43,12 @@ test-results/
 /deploy/secrets/
 /services/management-backend/secrets/
 /services/management-backend/private/
+
+# AWS/Terraform local state, plans and variables; retain .terraform.lock.hcl.
+.terraform/
+*.tfstate*
+*.tfplan
+*.plan
+*.tfvars
+*.tfvars.json
+/tests/aws/private/
