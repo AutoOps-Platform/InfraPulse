@@ -6,8 +6,8 @@ import { listFleet, readBinding, vmOptionsForQuery } from '../api/inventory';
 import { vmMetricsHref, vmsHref } from '../api/vm-routes';
 
 interface InventoryQuery extends DataQuery {
-  operation: 'fleet';
-  view: 'table' | 'summary';
+  operation: 'fleet' | 'host-info';
+  view?: 'table' | 'summary' | 'by-status' | 'by-os';
 }
 
 const statusFields = ['Fresh', 'Stale', 'Offline', 'Unknown'] as const;
@@ -21,15 +21,21 @@ class InventoryDataSource extends DataSourceApi<InventoryQuery> {
       const { rows } = await listFleet(api.servers);
       return vmOptionsForQuery(rows, query) ?? [];
     }
-    const prefix = 'binding $server_id ';
-    if (typeof query !== 'string' || query.length > 32768 || !query.startsWith(prefix)) {
+    if (typeof query !== 'string' || query.length > 32768) {
       return [];
     }
-    const subset = query.slice(prefix.length);
-    if (!nativeKeys.test(subset)) {
+    let required = identityKeys;
+    if (query === 'binding $server_id') {
+      required = identityKeys;
+    } else if (query.startsWith('binding $server_id ')) {
+      const subset = query.slice('binding $server_id '.length);
+      if (!nativeKeys.test(subset)) {
+        return [];
+      }
+      required = [...identityKeys, ...new Set(subset.split(','))];
+    } else {
       return [];
     }
-    const required = [...identityKeys, ...new Set(subset.split(','))];
     const selected = getTemplateSrv().replace('$server_id', options?.scopedVars);
     const binding = await readBinding(api.inventoryServer, selected);
     const valid = binding !== null && required.every((key) => Object.hasOwn(binding, key));
@@ -41,33 +47,100 @@ class InventoryDataSource extends DataSourceApi<InventoryQuery> {
   }
 
   async query(request: DataQueryRequest<InventoryQuery>): Promise<DataQueryResponse> {
-    const targets = request.targets.filter((target) => !target.hide && target.operation === 'fleet' && ['table', 'summary'].includes(target.view));
-    if (!targets.length) {
+    const visible = request.targets.filter((target) => !target.hide);
+    const hostTargets = visible.filter((target) => target.operation === 'host-info');
+    const fleetTargets = visible.filter(
+      (target) => target.operation === 'fleet' && target.view !== undefined && ['table', 'summary', 'by-status', 'by-os'].includes(target.view),
+    );
+    if (!hostTargets.length && !fleetTargets.length) {
       return { data: [] };
     }
-    const snapshot = await listFleet(api.servers);
-    const { rows, partial } = snapshot;
-    const meta = partial ? { notices: [{ severity: 'warning' as const, text: 'Partial inventory. Totals are unavailable.' }] } : undefined;
-    const data = targets.map(({ refId, view }) => view === 'summary' ? {
-        refId, meta, fields: [
-          { name: 'VMs', type: FieldType.number, values: [partial ? null : rows.length] },
-          ...statusFields.map((status) => ({ name: status, type: FieldType.number,
-            values: [partial ? null : rows.filter((row) => row.health === status).length] })),
-        ], length: 1,
-      } : {
-        refId, meta, length: rows.length, fields: [
-          { name: 'VM', type: FieldType.string, values: rows.map((row) => row.name) },
-          { name: 'Environment', type: FieldType.string, values: rows.map((row) => row.environment) },
-          { name: 'Status', type: FieldType.string, values: rows.map((row) => row.health) },
-          { name: 'Last sample', type: FieldType.time, values: rows.map((row) => row.lastSampleAt === null ? null : Date.parse(row.lastSampleAt)) },
-          { name: 'VM ID', type: FieldType.string, values: rows.map((row) => row.serverId) },
-          { name: 'Open', type: FieldType.string, values: rows.map((row) => row.canOpenMetrics ? 'Metrics' : 'Setup') },
-          { name: 'Path', type: FieldType.string, values: rows.map((row) => row.canOpenMetrics
-            ? vmMetricsHref(row.serverId, row.platform) : vmsHref(row.serverId)) },
-        ],
-      });
-    // Scenes only applies overrides to fields that carry a FieldConfig object.
-    return { data: data.map((frame) => ({ ...frame, fields: frame.fields.map((field) => ({ ...field, config: {} })) })) };
+
+    const frames = [];
+    if (hostTargets.length) {
+      const selected = getTemplateSrv().replace('$server_id', request.scopedVars);
+      let server = null;
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(selected)) {
+        try {
+          server = await api.inventoryServer(selected);
+        } catch {
+          server = null;
+        }
+      }
+      for (const { refId } of hostTargets) {
+        const agent = server?.onboarding.agent;
+        frames.push({
+          refId,
+          length: server ? 1 : 0,
+          fields: [
+            { name: 'VM', type: FieldType.string, values: server ? [server.name] : [], config: {} },
+            { name: 'OS', type: FieldType.string, values: server ? [server.os === 'windows' ? 'Windows' : 'Linux'] : [], config: {} },
+            { name: 'OS Version', type: FieldType.string, values: server ? [agent?.osVersion ?? '—'] : [], config: {} },
+            { name: 'Hostname', type: FieldType.string, values: server ? [agent?.hostname ?? '—'] : [], config: {} },
+            { name: 'IP', type: FieldType.string, values: server ? [agent?.ipAddress ?? '—'] : [], config: {} },
+            { name: 'Managed Node', type: FieldType.string, values: server ? [agent?.nodeId ?? '—'] : [], config: {} },
+            { name: 'SSM', type: FieldType.string, values: server ? [agent?.ssmStatus ?? '—'] : [], config: {} },
+            { name: 'Alloy', type: FieldType.string, values: server ? [agent?.cloudWatchVersion ? `${agent.cloudWatchVersion} (${agent.cloudWatchServiceState ?? '—'})` : '—'] : [], config: {} },
+            { name: 'Metrics', type: FieldType.string, values: server ? [server.onboarding.monitoring.health] : [], config: {} },
+          ],
+        });
+      }
+    }
+
+    if (fleetTargets.length) {
+      const snapshot = await listFleet(api.servers);
+      const { rows, partial } = snapshot;
+      const meta = partial ? { notices: [{ severity: 'warning' as const, text: 'Partial inventory. Totals are unavailable.' }] } : undefined;
+      for (const { refId, view } of fleetTargets) {
+        if (view === 'summary') {
+          frames.push({
+            refId, meta, length: 1, fields: [
+              { name: 'VMs', type: FieldType.number, values: [partial ? null : rows.length], config: {} },
+              ...statusFields.map((status) => ({
+                name: status,
+                type: FieldType.number,
+                values: [partial ? null : rows.filter((row) => row.health === status).length],
+                config: {},
+              })),
+            ],
+          });
+        } else if (view === 'by-status') {
+          frames.push({
+            refId, meta, length: statusFields.length, fields: [
+              { name: 'Status', type: FieldType.string, values: [...statusFields], config: {} },
+              { name: 'Count', type: FieldType.number, values: statusFields.map((s) => (partial ? null : rows.filter((r) => r.health === s).length)), config: {} },
+            ],
+          });
+        } else if (view === 'by-os') {
+          const osList = ['linux', 'windows'] as const;
+          frames.push({
+            refId, meta, length: osList.length, fields: [
+              { name: 'OS', type: FieldType.string, values: ['Linux', 'Windows'], config: {} },
+              { name: 'Count', type: FieldType.number, values: osList.map((o) => (partial ? null : rows.filter((r) => r.platform === o).length)), config: {} },
+            ],
+          });
+        } else {
+          frames.push({
+            refId, meta, length: rows.length, fields: [
+              { name: 'VM', type: FieldType.string, values: rows.map((row) => row.name), config: {} },
+              { name: 'OS', type: FieldType.string, values: rows.map((row) => (row.platform === 'windows' ? 'Windows' : 'Linux')), config: {} },
+              { name: 'Environment', type: FieldType.string, values: rows.map((row) => row.environment), config: {} },
+              { name: 'Hostname', type: FieldType.string, values: rows.map((row) => row.hostname ?? '—'), config: {} },
+              { name: 'IP', type: FieldType.string, values: rows.map((row) => row.ipAddress ?? '—'), config: {} },
+              { name: 'Status', type: FieldType.string, values: rows.map((row) => row.health), config: {} },
+              { name: 'SSM', type: FieldType.string, values: rows.map((row) => row.ssmStatus ?? '—'), config: {} },
+              { name: 'Alloy', type: FieldType.string, values: rows.map((row) => row.agentVersion ?? '—'), config: {} },
+              { name: 'Last sample', type: FieldType.time, values: rows.map((row) => (row.lastSampleAt === null ? null : Date.parse(row.lastSampleAt))), config: {} },
+              { name: 'VM ID', type: FieldType.string, values: rows.map((row) => row.serverId), config: {} },
+              { name: 'Open', type: FieldType.string, values: rows.map((row) => (row.canOpenMetrics ? 'Metrics' : 'Setup')), config: {} },
+              { name: 'Path', type: FieldType.string, values: rows.map((row) => (row.canOpenMetrics ? vmMetricsHref(row.serverId, row.platform) : vmsHref(row.serverId))), config: {} },
+            ],
+          });
+        }
+      }
+    }
+
+    return { data: frames };
   }
 
   async testDatasource() {

@@ -47,8 +47,8 @@ test('fleet keeps identical names as separate VM ids and includes a VM without m
   });
   assert.deepEqual(request, [{ archive: 'false', limit: 100, cursor: undefined }, { archive: 'false', limit: 100, cursor: 'next' }]);
   assert.deepEqual(result, { partial: false, rows: [
-    { serverId: a, name: 'same name', platform: 'linux', environment: 'lab', health: 'Fresh', lastSampleAt: sample, canOpenMetrics: true },
-    { serverId: b, name: 'same name', platform: 'linux', environment: 'lab', health: 'Unknown', lastSampleAt: null, canOpenMetrics: false },
+    { serverId: a, name: 'same name', platform: 'linux', environment: 'lab', health: 'Fresh', lastSampleAt: sample, canOpenMetrics: true, hostname: null, ipAddress: null, osVersion: null, nodeId, ssmStatus: null, agentVersion: null, agentState: null },
+    { serverId: b, name: 'same name', platform: 'linux', environment: 'lab', health: 'Unknown', lastSampleAt: null, canOpenMetrics: false, hostname: null, ipAddress: null, osVersion: null, nodeId, ssmStatus: null, agentVersion: null, agentState: null },
   ] });
 });
 

@@ -3,5 +3,5 @@
   "platform": "windows",
   "uid": "infrapulse-windows-host",
   "title": "Chi tiết VM (Windows)",
-  "description": "CloudWatch: CPU, RAM (Committed %), Ổ đĩa C: (% trống) và Network của binding Windows đã được Management xác minh."
+  "description": "AMP / Grafana Alloy (Windows Exporter): CPU, Memory, Disk Usage & I/O, Network Bandwidth & Flow, System Processes/Threads của binding Windows đã xác minh."
 }

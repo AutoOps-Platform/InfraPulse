@@ -9,6 +9,13 @@ export interface FleetRow {
   health: MonitoringHealth;
   lastSampleAt: string | null;
   canOpenMetrics: boolean;
+  hostname?: string | null;
+  ipAddress?: string | null;
+  osVersion?: string | null;
+  nodeId?: string | null;
+  ssmStatus?: string | null;
+  agentVersion?: string | null;
+  agentState?: string | null;
 }
 
 export type Binding = { server_id: string; managed_node_id: string; enrollment_id: string } & Record<`native_${string}`, string>;
@@ -73,6 +80,13 @@ export async function listFleet(readPage: ReadPage, signal?: AbortSignal): Promi
         health: server.onboarding.monitoring.health,
         lastSampleAt: server.onboarding.monitoring.lastObservedSampleAt,
         canOpenMetrics: projectBinding(server) !== null,
+        hostname: server.onboarding.agent.hostname,
+        ipAddress: server.onboarding.agent.ipAddress,
+        osVersion: server.onboarding.agent.osVersion,
+        nodeId: server.onboarding.agent.nodeId,
+        ssmStatus: server.onboarding.agent.ssmStatus,
+        agentVersion: server.onboarding.agent.cloudWatchVersion,
+        agentState: server.onboarding.agent.cloudWatchServiceState,
       });
     }
     if (result.next_cursor === null) {
