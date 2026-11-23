@@ -18,6 +18,8 @@ const target = {
 };
 const linuxName = 'dashboards/linux-host.json';
 const windowsName = 'dashboards/windows-host.json';
+const containersName = 'dashboards/containers.json';
+const containerDetailName = 'dashboards/container-detail.json';
 const linux = JSON.stringify({ uid: 'infrapulse-linux-host', title: 'VM Detail' });
 const windows = JSON.stringify({ uid: 'infrapulse-windows-host', title: 'VM Detail (Windows)' });
 const fleetName = 'dashboards/fleet.json';
@@ -27,6 +29,8 @@ test('plans all canonical JSON dashboards at owned live keys, not the manifest',
   const { planDashboardPublish } = await import(script.href);
   const files = await loadCompiledCloudWatchDashboards();
   assert.deepEqual(planDashboardPublish(target, files), [
+    [containerDetailName, 'grafana/dashboards/live/container-detail.json', 'infrapulse-container-detail'],
+    [containersName, 'grafana/dashboards/live/containers.json', 'infrapulse-containers'],
     [fleetName, 'grafana/dashboards/live/fleet.json', 'infrapulse-fleet'],
     [linuxName, 'grafana/dashboards/live/linux-host.json', 'infrapulse-linux-host'],
     [windowsName, 'grafana/dashboards/live/windows-host.json', 'infrapulse-windows-host'],
@@ -69,6 +73,8 @@ test('CLI dry run compiles locally and reports only public target metadata', asy
     ok: true, dryRun: true,
     destination: { bucket: target.bucket, prefix: target.prefix, region: target.region, accountId: target.account_id },
     dashboards: [
+      { key: 'grafana/dashboards/live/container-detail.json', uid: 'infrapulse-container-detail' },
+      { key: 'grafana/dashboards/live/containers.json', uid: 'infrapulse-containers' },
       { key: 'grafana/dashboards/live/fleet.json', uid: 'infrapulse-fleet' },
       { key: 'grafana/dashboards/live/linux-host.json', uid: 'infrapulse-linux-host' },
       { key: 'grafana/dashboards/live/windows-host.json', uid: 'infrapulse-windows-host' },
@@ -92,16 +98,16 @@ test('publish puts exact bodies with expected owner and stops on the first failu
   const failure = await publishDashboards(target, files, async (args) => {
     calls.push(args.slice(0, -1));
     paths.push(args.at(-1));
-    assert.equal(await readFile(args.at(-1), 'utf8'), files[calls.length === 1 ? fleetName : linuxName]);
+    assert.equal(await readFile(args.at(-1), 'utf8'), files[calls.length === 1 ? containerDetailName : containersName]);
     return calls.length === 1;
   });
   assert.deepEqual(calls, [
-    ['s3api', 'put-object', '--bucket', target.bucket, '--key', 'grafana/dashboards/live/fleet.json',
+    ['s3api', 'put-object', '--bucket', target.bucket, '--key', 'grafana/dashboards/live/container-detail.json',
       '--expected-bucket-owner', '123456789012', '--region', 'ap-southeast-1', '--content-type', 'application/json', '--body'],
-    ['s3api', 'put-object', '--bucket', target.bucket, '--key', 'grafana/dashboards/live/linux-host.json',
+    ['s3api', 'put-object', '--bucket', target.bucket, '--key', 'grafana/dashboards/live/containers.json',
       '--expected-bucket-owner', '123456789012', '--region', 'ap-southeast-1', '--content-type', 'application/json', '--body'],
   ]);
-  assert.deepEqual(failure, { ok: false, code: 'DASHBOARD_UPLOAD_UNCONFIRMED', confirmed: 1, total: 3 });
+  assert.deepEqual(failure, { ok: false, code: 'DASHBOARD_UPLOAD_UNCONFIRMED', confirmed: 1, total: 5 });
   for (const path of paths) await assert.rejects(stat(path), { code: 'ENOENT' });
 });
 

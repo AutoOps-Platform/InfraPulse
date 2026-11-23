@@ -8,6 +8,8 @@ const json = path => JSON.parse(readFileSync(new URL(path, root), 'utf8'));
 const inv = { type: 'infrapulse-inventory-datasource', uid: 'infrapulse-inventory' };
 const amp = { type: 'grafana-amazonprometheus-datasource', uid: 'infrapulse-amp' };
 const fleetPath = 'dashboards/fleet.json';
+const containersPath = 'dashboards/containers.json';
+const containerDetailPath = 'dashboards/container-detail.json';
 const detailPath = 'dashboards/linux-host.json';
 const windowsPath = 'dashboards/windows-host.json';
 
@@ -25,16 +27,32 @@ function allPanels(panels) {
   return out;
 }
 
-test('active release compiles fleet, Linux and Windows AMP dashboards, with a private-to-build manifest', async () => {
+test('active release compiles fleet, containers, Linux and Windows AMP dashboards, with a private-to-build manifest', async () => {
   const files = await loadCompiledCloudWatchDashboards();
-  assert.deepEqual(Object.keys(files).sort(), [fleetPath, detailPath, windowsPath, 'manifest.json']);
+  assert.deepEqual(Object.keys(files).sort(), [containerDetailPath, containersPath, fleetPath, detailPath, windowsPath, 'manifest.json']);
   assert.equal(dashboard(files, fleetPath).uid, 'infrapulse-fleet');
+  assert.equal(dashboard(files, containersPath).uid, 'infrapulse-containers');
+  assert.equal(dashboard(files, containerDetailPath).uid, 'infrapulse-container-detail');
   assert.equal(dashboard(files, detailPath).uid, 'infrapulse-linux-host');
   assert.equal(dashboard(files, windowsPath).uid, 'infrapulse-windows-host');
   const fleet = json('observability/grafana/dashboards/infrapulse/fleet.json');
   const offline = compileCloudWatchDashboards({ schemaVersion: 1, platforms: {} }, { fleet });
   assert.deepEqual(Object.keys(offline).sort(), [fleetPath, 'manifest.json']);
   assert.doesNotMatch(offline[fleetPath], /infrapulse-amp/);
+});
+
+test('container overview and detail dashboards expose VM-linked inventory table and 15798-style AMP charts', async () => {
+  const files = await loadCompiledCloudWatchDashboards();
+  const overview = dashboard(files, containersPath);
+  const detail = dashboard(files, containerDetailPath);
+  assert.deepEqual(overview.templating.list.map(v => v.name), ['server_id', 'container']);
+  assert.deepEqual(detail.templating.list.map(v => v.name), ['server_id', 'container']);
+  const table = overview.panels.find(p => p.type === 'table');
+  assert.ok(table, 'containers overview missing inventory table');
+  assert.ok(table.targets.some(t => t.datasource?.uid === inv.uid && t.operation === 'fleet'), 'containers table must join VM inventory');
+  assert.ok(table.targets.some(t => t.datasource?.uid === amp.uid && t.expr.includes('infrapulse_container_info')));
+  assert.equal(overview.panels.filter(p => p.type === 'timeseries').length, 4);
+  assert.equal(detail.panels.filter(p => p.type === 'timeseries').length, 4);
 });
 
 test('fleet uses authorized inventory for KPI summary, health/OS charts and enriched VM table', async () => {
