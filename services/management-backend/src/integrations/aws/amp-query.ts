@@ -24,13 +24,14 @@ function formatAmzDate(date: Date): { amzDate: string; dateStamp: string } {
   return { amzDate: iso, dateStamp: iso.slice(0, 8) };
 }
 
-function signSigV4(input: {
+export function signSigV4(input: {
   method: 'POST';
   url: URL;
   region: string;
   service: string;
-  body: string;
+  body: string | Buffer;
   contentType: string;
+  extraHeaders?: Record<string, string>;
   credentials: AwsStaticCredentials;
   now?: Date;
 }): Record<string, string> {
@@ -42,6 +43,11 @@ function signSigV4(input: {
     'x-amz-content-sha256': payloadHash,
     'x-amz-date': amzDate,
   };
+  if (input.extraHeaders) {
+    for (const [key, value] of Object.entries(input.extraHeaders)) {
+      headers[key.toLowerCase()] = value;
+    }
+  }
   if (input.credentials.sessionToken) {
     headers['x-amz-security-token'] = input.credentials.sessionToken;
   }

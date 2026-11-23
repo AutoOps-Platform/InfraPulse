@@ -11,6 +11,7 @@ const fleetPath = 'dashboards/fleet.json';
 const containersPath = 'dashboards/containers.json';
 const containerDetailPath = 'dashboards/container-detail.json';
 const detailPath = 'dashboards/linux-host.json';
+const sslPath = 'dashboards/ssl-certs.json';
 const windowsPath = 'dashboards/windows-host.json';
 
 function dashboard(files, path) {
@@ -27,18 +28,28 @@ function allPanels(panels) {
   return out;
 }
 
-test('active release compiles fleet, containers, Linux and Windows AMP dashboards, with a private-to-build manifest', async () => {
+test('active release compiles fleet, containers, SSL, Linux and Windows AMP dashboards, with a private-to-build manifest', async () => {
   const files = await loadCompiledCloudWatchDashboards();
-  assert.deepEqual(Object.keys(files).sort(), [containerDetailPath, containersPath, fleetPath, detailPath, windowsPath, 'manifest.json']);
+  assert.deepEqual(Object.keys(files).sort(), [containerDetailPath, containersPath, fleetPath, detailPath, sslPath, windowsPath, 'manifest.json']);
   assert.equal(dashboard(files, fleetPath).uid, 'infrapulse-fleet');
   assert.equal(dashboard(files, containersPath).uid, 'infrapulse-containers');
   assert.equal(dashboard(files, containerDetailPath).uid, 'infrapulse-container-detail');
   assert.equal(dashboard(files, detailPath).uid, 'infrapulse-linux-host');
+  assert.equal(dashboard(files, sslPath).uid, 'infrapulse-ssl');
   assert.equal(dashboard(files, windowsPath).uid, 'infrapulse-windows-host');
   const fleet = json('observability/grafana/dashboards/infrapulse/fleet.json');
   const offline = compileCloudWatchDashboards({ schemaVersion: 1, platforms: {} }, { fleet });
   assert.deepEqual(Object.keys(offline).sort(), [fleetPath, 'manifest.json']);
   assert.doesNotMatch(offline[fleetPath], /infrapulse-amp/);
+});
+
+test('SSL certificates dashboard follows 13922 layout for external HTTPS and local VM certs', async () => {
+  const files = await loadCompiledCloudWatchDashboards();
+  const ssl = dashboard(files, sslPath);
+  assert.deepEqual(ssl.templating.list.map(v => v.name), ['critical_threshold', 'warning_threshold', 'list_threshold']);
+  assert.ok(ssl.panels.some(p => p.title.includes('External HTTPS Endpoints') && p.type === 'table'));
+  assert.ok(ssl.panels.some(p => p.title.includes('Host Local Certificates') && p.type === 'table'));
+  assert.ok(ssl.panels.some(p => p.title === 'Media' && p.type === 'piechart'));
 });
 
 test('container overview and detail dashboards expose VM-linked inventory table and 15798-style AMP charts', async () => {

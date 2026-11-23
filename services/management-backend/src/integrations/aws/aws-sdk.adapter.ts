@@ -20,6 +20,7 @@ import {
 } from '@aws-sdk/client-ssm';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { queryAmpRange, type AmpRangePoint } from './amp-query.js';
+import { remoteWriteToAmp, type AmpRemoteWriteFn } from './amp-remote-write.js';
 import { parseStrictJson } from '../../app/common/pagination.js';
 import {
   buildQueries,
@@ -79,6 +80,29 @@ export interface AwsClients {
 }
 
 type ContainerCredentials = ReturnType<typeof import('@aws-sdk/credential-provider-http').fromHttp>;
+
+export function createAmpRemoteWriter(
+  config: AwsConfig,
+  credentials?: ContainerCredentials,
+): AmpRemoteWriteFn | undefined {
+  if (!config.ampEndpoint) return undefined;
+  const endpoint = config.ampEndpoint;
+  const s3 = new S3Client({
+    region: config.region,
+    ignoreConfiguredEndpointUrls: true,
+    useFipsEndpoint: false,
+    useDualstackEndpoint: false,
+    ...(credentials === undefined ? {} : { credentials }),
+  });
+  return (samples, signal) =>
+    remoteWriteToAmp({
+      endpoint,
+      region: config.region,
+      credentials: () => s3.config.credentials(),
+      samples,
+      signal,
+    });
+}
 
 export function createAwsClients(
   config: AwsConfig,

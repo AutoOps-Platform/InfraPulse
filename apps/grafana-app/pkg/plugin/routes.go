@@ -37,6 +37,12 @@ var managementRoutes = []allowedRoute{
 	route("POST", `/api/v1/servers/`+uuidSegment+`/onboarding/bootstrap-link`),
 	route("POST", `/api/v1/servers/`+uuidSegment+`/onboarding/retry`),
 	route("POST", `/api/v1/servers/`+uuidSegment+`/decommission`),
+	route("GET", `/api/v1/ssl-targets`),
+	route("POST", `/api/v1/ssl-targets`),
+	route("GET", `/api/v1/ssl-targets/`+uuidSegment),
+	route("PATCH", `/api/v1/ssl-targets/`+uuidSegment),
+	route("DELETE", `/api/v1/ssl-targets/`+uuidSegment),
+	route("POST", `/api/v1/ssl-targets/`+uuidSegment+`/probe`),
 }
 
 func managementTarget(method, rawURL, resourcePath string) (string, error) {

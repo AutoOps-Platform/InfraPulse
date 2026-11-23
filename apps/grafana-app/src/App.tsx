@@ -8,6 +8,7 @@ import { fleetHref, legacyVmsHref, selectedVm, vmsHref } from './api/vm-routes';
 import { useResource } from './hooks/useApi';
 import { LoadState, PrincipalContext } from './components/Common';
 import Servers from './pages/Servers';
+import SslTargets from './pages/SslTargets';
 import { getStyles } from './styles';
 
 function LegacyVms() {
@@ -39,6 +40,7 @@ export default function App() {
       {principal.data && <PrincipalContext.Provider value={principal.data}>
         <Routes>
           <Route path="vms" element={<Servers />} />
+          <Route path="ssl" element={<SslTargets />} />
           <Route path="servers" element={<LegacyVms />} />
           <Route path="install" element={<LegacyVms />} />
           <Route path="overview" element={fleet ? <ExternalDestination href={fleet} /> : <ExternalDestination href={vmsHref()} />} />

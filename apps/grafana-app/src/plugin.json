@@ -25,6 +25,14 @@
       "addToNav": true,
       "defaultNav": true,
       "role": "Viewer"
+    },
+    {
+      "type": "page",
+      "name": "SSL Certificates",
+      "path": "/a/infrapulse-infrapulse-app/ssl",
+      "addToNav": true,
+      "defaultNav": false,
+      "role": "Viewer"
     }
   ]
 }

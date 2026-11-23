@@ -1024,6 +1024,305 @@ function containerDetailDashboard(source) {
   return dashboard(source, panels, [vmVar, containerVar]);
 }
 
+/** Faithful Grafana 13 port of X509 Certificate Exporter (13922 rev 4) tuned for wide readability on InfraPulse AMP. */
+function sslCertsDashboard(source) {
+  const customVar = (name, label, values, selected) => ({
+    name,
+    label,
+    type: 'custom',
+    hide: 0,
+    includeAll: false,
+    multi: false,
+    skipUrlSync: false,
+    query: values.join(','),
+    current: { selected: true, text: String(selected), value: String(selected) },
+    options: values.map((v) => ({ selected: v === selected, text: String(v), value: String(v) })),
+  });
+
+  const variables = [
+    customVar('critical_threshold', 'Critical (days)', [1, 7, 14, 15, 28, 30, 60, 90, 180, 365], 7),
+    customVar('warning_threshold', 'Warning (days)', [1, 7, 14, 15, 28, 30, 60, 90, 180, 365], 28),
+    customVar('list_threshold', 'Expiring < (days)', [1, 7, 15, 30, 60, 90, 180, 365, 730, 1095, 1460, 1825, 3650, 7300], 180),
+  ];
+
+  const kpiStat = (id, title, gridPos, expr, thresholds) => ({
+    id,
+    type: 'stat',
+    title,
+    datasource: AMP,
+    gridPos,
+    targets: [prom('A', expr, '', true)],
+    fieldConfig: {
+      defaults: { unit: 'short', decimals: 0, noValue: '0', color: { mode: 'thresholds' }, thresholds: thresholdsOf(thresholds) },
+      overrides: [],
+    },
+    options: {
+      colorMode: 'background_solid',
+      graphMode: 'none',
+      justifyMode: 'center',
+      orientation: 'horizontal',
+      textMode: 'value',
+      wideLayout: false,
+      text: { valueSize: 30 },
+      reduceOptions: { calcs: ['lastNotNull'], fields: '', values: false },
+    },
+  });
+
+  const timeLeftOverride = override(
+    'Time Left',
+    { id: 'custom.align', value: 'center' },
+    { id: 'custom.width', value: 120 },
+    { id: 'custom.filterable', value: false },
+    { id: 'custom.cellOptions', value: { type: 'color-background', mode: 'basic' } },
+    {
+      id: 'thresholds',
+      value: thresholdsOf([
+        { color: 'dark-red', value: null },
+        { color: 'semi-dark-red', value: 0 },
+        { color: 'semi-dark-orange', value: 7 },
+        { color: 'semi-dark-green', value: 28 },
+      ]),
+    },
+    { id: 'unit', value: 'suffix: d' },
+    { id: 'decimals', value: 1 },
+  );
+
+  const countTable = (id, title, gridPos, expr, keyField, keyLabel, valueLabel = 'Certs') => ({
+    id,
+    type: 'table',
+    title,
+    datasource: AMP,
+    gridPos,
+    targets: [prom('A', expr, '', true, { format: 'table' })],
+    transformations: [
+      { id: 'filterFieldsByName', options: { include: { names: [keyField, 'Value'] } } },
+      { id: 'organize', options: { indexByName: { [keyField]: 0, Value: 1 }, renameByName: { [keyField]: keyLabel, Value: valueLabel } } },
+    ],
+    fieldConfig: {
+      defaults: { noValue: '—', custom: { filterable: false, minWidth: 60 } },
+      overrides: [
+        override(valueLabel, { id: 'custom.align', value: 'center' }, { id: 'custom.width', value: 80 }),
+      ],
+    },
+    options: { showHeader: true, cellHeight: 'sm', footer: { show: false } },
+  });
+
+  const validityTable = (id, title, gridPos, expr, cols, renames) => ({
+    id,
+    type: 'table',
+    title,
+    datasource: AMP,
+    gridPos,
+    targets: [prom('A', expr, '', true, { format: 'table' })],
+    transformations: [
+      { id: 'filterFieldsByName', options: { include: { pattern: `^(${cols.join('|')})$` } } },
+      {
+        id: 'organize',
+        options: {
+          indexByName: Object.fromEntries(cols.map((c, idx) => [c, idx])),
+          renameByName: renames,
+        },
+      },
+    ],
+    fieldConfig: {
+      defaults: { noValue: '—', custom: { filterable: false, minWidth: 60 } },
+      overrides: [
+        override('Subject CN', { id: 'custom.width', value: 135 }),
+        override('Group', { id: 'custom.width', value: 90 }),
+        override('Days', { id: 'custom.align', value: 'center' }, { id: 'custom.width', value: 75 }, { id: 'unit', value: 'suffix: d' }, { id: 'decimals', value: 0 }),
+      ],
+    },
+    options: { showHeader: true, cellHeight: 'sm', footer: { show: false } },
+  });
+
+  const exporterLegend = { displayMode: 'list', placement: 'bottom', calcs: ['min', 'max', 'lastNotNull'], showLegend: true };
+
+  const panels = [
+    // Row 1: Overview — 6 spacious w=4 KPI cards (zero title truncation) + Media Donut + Top Issuers + Top Groups
+    rowPanel(24, 'Overview', 0, false),
+    kpiStat(2, 'Total Certificates', { x: 0, y: 1, w: 4, h: 4 },
+      'count(x509_cert_not_after) or vector(0)',
+      [{ color: 'semi-dark-blue', value: null }]),
+    kpiStat(18, 'Expired', { x: 4, y: 1, w: 4, h: 4 },
+      'count(((x509_cert_not_after - time()) / 86400) < 0) or vector(0)',
+      [{ color: 'semi-dark-green', value: null }, { color: 'dark-red', value: 1 }]),
+    kpiStat(19, 'Critical (< $critical_threshold d)', { x: 8, y: 1, w: 4, h: 4 },
+      'count(((x509_cert_not_after - time()) / 86400) >= 0 and ((x509_cert_not_after - time()) / 86400) < $critical_threshold) or vector(0)',
+      [{ color: 'semi-dark-green', value: null }, { color: 'semi-dark-red', value: 1 }]),
+    kpiStat(20, 'Warning (< $warning_threshold d)', { x: 12, y: 1, w: 4, h: 4 },
+      'count(((x509_cert_not_after - time()) / 86400) >= 0 and ((x509_cert_not_after - time()) / 86400) < $warning_threshold) or vector(0)',
+      [{ color: 'semi-dark-green', value: null }, { color: 'semi-dark-orange', value: 1 }]),
+    kpiStat(17, 'Exporters', { x: 16, y: 1, w: 4, h: 4 },
+      'count(x509_read_errors) or vector(0)',
+      [{ color: 'semi-dark-purple', value: null }]),
+    kpiStat(36, 'Exporter Errors', { x: 20, y: 1, w: 4, h: 4 },
+      'sum(x509_read_errors) or vector(0)',
+      [{ color: 'semi-dark-green', value: null }, { color: 'semi-dark-red', value: 1 }]),
+
+    {
+      id: 8,
+      type: 'piechart',
+      title: 'Media',
+      datasource: AMP,
+      gridPos: { x: 0, y: 5, w: 8, h: 7 },
+      targets: [
+        prom('A', 'count(x509_cert_not_after{media="external_https"})', 'External HTTPS', true),
+        prom('B', 'count(x509_cert_not_after{media="linux_file"})', 'Linux Cert File', true),
+        prom('C', 'count(x509_cert_not_after{media="windows_store"})', 'Windows Cert Store', true),
+      ],
+      fieldConfig: {
+        defaults: { unit: 'short', decimals: 0, color: { mode: 'palette-classic' } },
+        overrides: [],
+      },
+      options: {
+        pieType: 'donut',
+        legend: { displayMode: 'table', placement: 'right', showLegend: true, values: ['value', 'percent'] },
+        reduceOptions: { calcs: ['lastNotNull'], fields: '', values: false },
+        tooltip: { mode: 'single', sort: 'none' },
+      },
+    },
+    countTable(14, 'Top Issuers', { x: 8, y: 5, w: 8, h: 7 },
+      'topk(10, sort_desc(count by (issuer_CN) (x509_cert_not_after)))', 'issuer_CN', 'Issuer CN', 'Certs'),
+    countTable(15, 'Top Groups (External HTTPS)', { x: 16, y: 5, w: 8, h: 7 },
+      'topk(10, sort_desc(count by (target_group) (x509_cert_not_after{endpoint!=""})))', 'target_group', 'Group', 'Certs'),
+
+    // Row 2: Expiration — full-width w=24 tables so endpoints, file paths, issuers, and days never clip
+    rowPanel(26, 'Expiration', 12, false),
+    {
+      id: 46,
+      type: 'table',
+      title: 'External HTTPS Endpoints (time left < $list_threshold days)',
+      datasource: AMP,
+      gridPos: { x: 0, y: 13, w: 24, h: 7 },
+      targets: [
+        prom('A', 'sort(((x509_cert_not_after{endpoint!=""} - time()) / 86400) < $list_threshold)', '', true, { format: 'table' }),
+      ],
+      transformations: [
+        { id: 'filterFieldsByName', options: { include: { pattern: '^(target_name|subject_CN|target_group|endpoint|issuer_CN|Value)$' } } },
+        {
+          id: 'organize',
+          options: {
+            indexByName: { target_name: 0, subject_CN: 1, target_group: 2, endpoint: 3, issuer_CN: 4, Value: 5 },
+            renameByName: {
+              target_name: 'Name',
+              subject_CN: 'Subject CN',
+              target_group: 'Group',
+              endpoint: 'Endpoint',
+              issuer_CN: 'Issuer',
+              Value: 'Time Left',
+            },
+          },
+        },
+      ],
+      fieldConfig: {
+        defaults: { noValue: '—', custom: { filterable: true, minWidth: 80 } },
+        overrides: [
+          override('Name', { id: 'custom.width', value: 160 }),
+          override('Subject CN', { id: 'custom.width', value: 170 }),
+          override('Group', { id: 'custom.width', value: 110 }),
+          override('Endpoint', { id: 'custom.width', value: 230 }),
+          timeLeftOverride,
+        ],
+      },
+      options: { showHeader: true, cellHeight: 'md', footer: { show: false } },
+    },
+    {
+      id: 47,
+      type: 'table',
+      title: 'Host Local Certificates (time left < $list_threshold days)',
+      datasource: { type: 'datasource', uid: '-- Mixed --' },
+      gridPos: { x: 0, y: 20, w: 24, h: 7 },
+      targets: [
+        prom('A', 'sort(((x509_cert_not_after{filepath!=""} - time()) / 86400) < $list_threshold)', '', true, { format: 'table' }),
+        { datasource: INVENTORY, refId: 'B', operation: 'fleet', view: 'table' },
+      ],
+      transformations: [
+        { id: 'renameByRegex', options: { regex: '^VM ID$', renamePattern: 'server_id' } },
+        { id: 'joinByField', options: { byField: 'server_id', mode: 'outerTabular' } },
+        {
+          id: 'filterByValue',
+          options: {
+            type: 'include',
+            match: 'all',
+            filters: [{ fieldName: 'filepath', config: { id: 'isNotNull', options: {} } }],
+          },
+        },
+        { id: 'filterFieldsByName', options: { include: { pattern: '^(subject_CN|VM|OS|filepath|issuer_CN|Value|Path)$' } } },
+        {
+          id: 'organize',
+          options: {
+            indexByName: { subject_CN: 0, VM: 1, OS: 2, filepath: 3, issuer_CN: 4, Value: 5, Path: 6 },
+            renameByName: {
+              subject_CN: 'Subject CN',
+              VM: 'VM',
+              OS: 'OS',
+              filepath: 'Path / Store',
+              issuer_CN: 'Issuer',
+              Value: 'Time Left',
+            },
+          },
+        },
+      ],
+      fieldConfig: {
+        defaults: { noValue: '—', custom: { filterable: true, minWidth: 70 } },
+        overrides: [
+          override('Path', { id: 'custom.hidden', value: true }),
+          override('Subject CN', { id: 'custom.width', value: 190 }),
+          override('VM', { id: 'custom.width', value: 135 }, {
+            id: 'links',
+            value: [{ title: 'Chi tiết VM ${__value.raw}', url: '${__data.fields["Path"]}&from=${__from}&to=${__to}' }],
+          }),
+          override('OS', { id: 'mappings', value: statusMappings }, badgeCell, { id: 'custom.width', value: 85 }),
+          override('Issuer', { id: 'custom.width', value: 180 }),
+          timeLeftOverride,
+        ],
+      },
+      options: { showHeader: true, cellHeight: 'md', footer: { show: false } },
+    },
+
+    // Row 3: Validity Period Breakdown (13922 Charts section)
+    rowPanel(12, 'Validity Period & Host Summary', 27, false),
+    validityTable(31, 'External HTTPS : Shortest Validity Period', { x: 0, y: 28, w: 12, h: 8 },
+      'bottomk(10, (x509_cert_not_after{endpoint!=""} - x509_cert_not_before{endpoint!=""}) / 86400)',
+      ['subject_CN', 'target_group', 'endpoint', 'Value'],
+      { subject_CN: 'Subject CN', target_group: 'Group', endpoint: 'Endpoint', Value: 'Days' }),
+    validityTable(33, 'Host Paths : Shortest Validity Period', { x: 12, y: 28, w: 12, h: 8 },
+      'bottomk(10, (x509_cert_not_after{filepath!=""} - x509_cert_not_before{filepath!=""}) / 86400)',
+      ['subject_CN', 'filepath', 'Value'],
+      { subject_CN: 'Subject CN', filepath: 'Path / Store', Value: 'Days' }),
+    validityTable(28, 'External HTTPS : Longest Validity Period', { x: 0, y: 36, w: 12, h: 8 },
+      'topk(10, (x509_cert_not_after{endpoint!=""} - x509_cert_not_before{endpoint!=""}) / 86400)',
+      ['subject_CN', 'target_group', 'endpoint', 'Value'],
+      { subject_CN: 'Subject CN', target_group: 'Group', endpoint: 'Endpoint', Value: 'Days' }),
+    validityTable(32, 'Host Paths : Longest Validity Period', { x: 12, y: 36, w: 12, h: 8 },
+      'topk(10, (x509_cert_not_after{filepath!=""} - x509_cert_not_before{filepath!=""}) / 86400)',
+      ['subject_CN', 'filepath', 'Value'],
+      { subject_CN: 'Subject CN', filepath: 'Path / Store', Value: 'Days' }),
+
+    // Row 4: Exporters health (collapsed by default for clean primary view, expandable in 1 click)
+    rowPanel(35, 'Exporters', 44, true, [
+      tsPanel(38, 'Reporting Exporters', { x: 0, y: 45, w: 12, h: 7 }, [
+        prom('A', 'count(x509_read_errors) or vector(0)', 'exporters'),
+      ], { unit: 'short', min: 0, fillOpacity: 15, lineWidth: 2, legend: exporterLegend }),
+      tsPanel(39, 'Exporters with Errors', { x: 12, y: 45, w: 12, h: 7 }, [
+        prom('A', 'count(x509_read_errors > 0) or vector(0)', 'exporters with errors'),
+      ], { unit: 'short', min: 0, fillOpacity: 15, lineWidth: 2, legend: exporterLegend }),
+      tsPanel(41, 'Error Rate', { x: 0, y: 52, w: 12, h: 7 }, [
+        prom('A', 'sum(rate(x509_read_errors[15m])) or vector(0)', 'error rate'),
+      ], { unit: 'cps', min: 0, fillOpacity: 15, lineWidth: 2, legend: exporterLegend }),
+      tsPanel(40, 'Cumulative Errors', { x: 12, y: 52, w: 12, h: 7 }, [
+        prom('A', 'sum(x509_read_errors) or vector(0)', 'errors'),
+      ], { unit: 'short', min: 0, fillOpacity: 15, lineWidth: 2, legend: exporterLegend, overrides: [override('errors', fixedColor('red'))] }),
+      countTable(43, 'Top Exporters by Error Rate', { x: 0, y: 59, w: 12, h: 7 },
+        'topk(10, rate(x509_read_errors[6h]))', 'instance', 'Instance', 'Rate'),
+      countTable(44, 'Top Exporters by Cumulative Errors', { x: 12, y: 59, w: 12, h: 7 },
+        'topk(10, x509_read_errors)', 'instance', 'Instance', 'Errors'),
+    ]),
+  ];
+
+  return dashboard(source, panels, variables);
+}
+
 /** Deterministic AMP + Grafana 13 dashboard compiler. */
 export function compileCloudWatchDashboards(value, templates) {
   const release = decodeAgentRelease(value);
@@ -1042,6 +1341,12 @@ export function compileCloudWatchDashboards(value, templates) {
     const containerDetail = containerDetailDashboard(containerDetailSource);
     files['dashboards/container-detail.json'] = encode(containerDetail);
     entries.push({ uid: containerDetail.uid, templateHash: releaseSha256(containerDetailSource), dashboardHash: releaseSha256(containerDetail) });
+  }
+  if (templates?.sslCerts) {
+    const sslSource = template(templates.sslCerts, 'infrapulse-ssl', 'infrapulse-ssl-template-v1');
+    const ssl = sslCertsDashboard(sslSource);
+    files['dashboards/ssl-certs.json'] = encode(ssl);
+    entries.push({ uid: ssl.uid, templateHash: releaseSha256(sslSource), dashboardHash: releaseSha256(ssl) });
   }
   const linux = release.platforms.linux;
   if (linux) {
@@ -1075,6 +1380,7 @@ export async function loadCompiledCloudWatchDashboards() {
     fleet: await readPublicJson(INPUT + 'fleet.json'),
     containers: await readPublicJson(INPUT + 'containers.json'),
     containerDetail: await readPublicJson(INPUT + 'container-detail.json'),
+    sslCerts: await readPublicJson(INPUT + 'ssl-certs.json'),
   };
   if (release.platforms.linux) templates.linux = await readPublicJson(INPUT + 'linux-host.json');
   if (release.platforms.windows) templates.windows = await readPublicJson(INPUT + 'windows-host.json');

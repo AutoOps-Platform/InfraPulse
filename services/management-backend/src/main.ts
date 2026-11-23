@@ -41,11 +41,14 @@ export async function createManagementApp(
         }
       : undefined;
 
-    app = await NestFactory.create(AppModule.register(config, onboarding), {
-      bodyParser: false,
-      logger: false,
-      abortOnError: false,
-    });
+    app = await NestFactory.create(
+      AppModule.register(config, onboarding, qualified?.ampRemoteWrite),
+      {
+        bodyParser: false,
+        logger: false,
+        abortOnError: false,
+      },
+    );
 
     if (qualified) {
       const servers = app.get(ServersService);

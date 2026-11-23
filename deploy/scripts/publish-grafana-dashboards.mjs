@@ -17,6 +17,7 @@ const ARTIFACTS = new Map([
   ['dashboards/containers.json', 'infrapulse-containers'],
   ['dashboards/fleet.json', 'infrapulse-fleet'],
   ['dashboards/linux-host.json', 'infrapulse-linux-host'],
+  ['dashboards/ssl-certs.json', 'infrapulse-ssl'],
   ['dashboards/windows-host.json', 'infrapulse-windows-host'],
 ]);
 const fail = (code) => { throw new Error(code); };
