@@ -87,4 +87,10 @@ class WebhookProcessingResult(BaseModel):
     rca_report: RCAReport | None = None
     notification_message: str = ""
     telegram_receipt: dict[str, Any] | None = None
+    executed_action_result: dict[str, Any] | None = None
+    alerts_processed: int = 1
+    batch_results: list[WebhookProcessingResult] = Field(default_factory=list)
     trace: PipelineTraceMetadata
+
+
+WebhookProcessingResult.model_rebuild()

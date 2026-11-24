@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
 from app.agent.sasa_agent import SaSaAgent
@@ -15,17 +18,30 @@ def create_app(
     *,
     sasa_agent: SaSaAgent | None = None,
 ) -> FastAPI:
-    """Create and configure the FastAPI application instance."""
+    """Create and configure the FastAPI application instance with optional Telegram polling lifespan."""
     resolved_settings = settings or AIOpsSettings.from_env()
     agent = sasa_agent or SaSaAgent(resolved_settings)
 
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        if (
+            bool(getattr(agent.settings, "TELEGRAM_POLLING_ENABLED", False))
+            and agent.telegram_service.is_bot_configured
+        ):
+            await agent.telegram_service.start_polling()
+        try:
+            yield
+        finally:
+            await agent.telegram_service.stop_polling()
+
     application = FastAPI(
         title="InfraPulse AIOps Server (SaSa AI)",
-        version="0.1.0",
+        version="0.2.0",
         description=(
-            "Webhook-driven AIOps backend integrating DeepSeek (Cloud API & Ollama Local), "
-            "Gemini, and the Jev Decision Model with Human-in-the-Loop (HITL) policy guardrails."
+            "Webhook-driven AIOps backend integrating Amazon Managed Prometheus (AMP), "
+            "DeepSeek/Gemini ProviderRouter, Jev Decision Model, Runbook RAG, and Telegram HITL."
         ),
+        lifespan=lifespan,
     )
     application.state.settings = resolved_settings
     application.state.sasa_agent = agent

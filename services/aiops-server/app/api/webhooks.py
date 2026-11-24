@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import hmac
+import inspect
 from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from app.agent.prompts import build_system_prompt
-from app.approvals.telegram import ApprovalRecord, TelegramCallbackPayload
+from app.approvals.telegram import ApprovalRecord
 from app.guardrails.sanitizer import GuardrailViolationError, InputSanitizer
 from app.providers.base import InferenceRequest, InferenceResponse, ProviderError
 from app.rag.runbook_rag import RunbookRetrievalResult
@@ -44,19 +45,87 @@ class RAGSearchPayload(BaseModel):
     query: str = Field(min_length=1, max_length=1024)
     os_type: str | None = None
     service: str | None = None
+    domain: str | None = None
     top_k: int = Field(default=2, ge=1, le=5)
 
 
+def _get_secret_value(settings: Any, attr_name: str) -> str:
+    """Safely extract a stripped secret string from `AIOpsSettings`."""
+    raw = getattr(settings, attr_name, None)
+    if raw is None:
+        return ""
+    if hasattr(raw, "get_secret_value"):
+        return str(raw.get_secret_value()).strip()
+    return str(raw).strip()
+
+
 def _verify_webhook_secret(request: Request, x_aiops_webhook_token: str | None) -> None:
-    """Verify optional shared webhook token when `AIOPS_WEBHOOK_SECRET` is configured."""
-    expected = request.app.state.sasa_agent.settings.AIOPS_WEBHOOK_SECRET.get_secret_value().strip()
+    """Verify shared Grafana webhook token (`AIOPS_WEBHOOK_SECRET`), failing closed in production."""
+    settings = request.app.state.sasa_agent.settings
+    expected = _get_secret_value(settings, "AIOPS_WEBHOOK_SECRET")
     if not expected:
+        if settings.AIOPS_ENV == "production":
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="AIOPS_WEBHOOK_SECRET must be configured in production.",
+            )
         return
     provided = (x_aiops_webhook_token or "").strip()
     if not provided or not hmac.compare_digest(expected, provided):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing X-AIOps-Webhook-Token header.",
+        )
+
+
+def _verify_internal_api_key(
+    request: Request,
+    x_aiops_api_key: str | None,
+    authorization: str | None,
+) -> None:
+    """Verify `X-AIOps-API-Key` or `Authorization: Bearer <key>` against `AIOPS_INTERNAL_API_KEY`."""
+    settings = request.app.state.sasa_agent.settings
+    expected = _get_secret_value(settings, "AIOPS_INTERNAL_API_KEY")
+    if not expected:
+        if settings.AIOPS_ENV == "production":
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="AIOPS_INTERNAL_API_KEY must be configured in production.",
+            )
+        return
+
+    provided = (x_aiops_api_key or "").strip()
+    if not provided and authorization:
+        auth_val = authorization.strip()
+        if auth_val.lower().startswith("bearer "):
+            provided = auth_val[7:].strip()
+
+    if not provided or not hmac.compare_digest(expected, provided):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing internal API key.",
+        )
+
+
+def _verify_telegram_webhook_secret(
+    request: Request,
+    x_telegram_bot_api_secret_token: str | None,
+) -> None:
+    """Verify Telegram's `X-Telegram-Bot-Api-Secret-Token` header, failing closed in production."""
+    settings = request.app.state.sasa_agent.settings
+    expected = _get_secret_value(settings, "TELEGRAM_WEBHOOK_SECRET")
+    if not expected:
+        if settings.AIOPS_ENV == "production":
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="TELEGRAM_WEBHOOK_SECRET must be configured in production.",
+            )
+        return
+    provided = (x_telegram_bot_api_secret_token or "").strip()
+    if not provided or not hmac.compare_digest(expected, provided):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing X-Telegram-Bot-Api-Secret-Token header.",
         )
 
 
@@ -83,8 +152,11 @@ async def receive_grafana_webhook(
 async def evaluate_decision(
     payload: JevDecisionRequest,
     request: Request,
+    x_aiops_api_key: str | None = Header(default=None),
+    authorization: str | None = Header(default=None),
 ) -> PolicyDecision:
     """Directly test Task 2: Jev Decision Model + Deterministic Policy Gate."""
+    _verify_internal_api_key(request, x_aiops_api_key, authorization)
     agent = request.app.state.sasa_agent
     try:
         InputSanitizer.inspect_text(payload.alert_name, field_name="alert_name")
@@ -107,8 +179,11 @@ async def evaluate_decision(
 async def direct_agent_infer(
     payload: DirectInferencePayload,
     request: Request,
+    x_aiops_api_key: str | None = Header(default=None),
+    authorization: str | None = Header(default=None),
 ) -> dict[str, Any] | InferenceResponse:
     """Directly test Task 1: DeepSeek (Ollama or Cloud API) / Gemini inference."""
+    _verify_internal_api_key(request, x_aiops_api_key, authorization)
     agent = request.app.state.sasa_agent
     try:
         clean_prompt = InputSanitizer.inspect_text(payload.prompt, field_name="prompt")
@@ -135,8 +210,13 @@ async def direct_agent_infer(
 
 
 @router.get("/mcp/tools", response_model=list[MCPToolDefinition])
-async def list_mcp_tools(request: Request) -> list[MCPToolDefinition]:
-    """List all registered read-only MCP diagnostic tools available to SaSa AI."""
+async def list_mcp_tools(
+    request: Request,
+    x_aiops_api_key: str | None = Header(default=None),
+    authorization: str | None = Header(default=None),
+) -> list[MCPToolDefinition]:
+    """List all registered MCP diagnostic tools available to SaSa AI."""
+    _verify_internal_api_key(request, x_aiops_api_key, authorization)
     return request.app.state.sasa_agent.mcp_tools.list_tools()
 
 
@@ -144,8 +224,11 @@ async def list_mcp_tools(request: Request) -> list[MCPToolDefinition]:
 async def call_mcp_tool(
     payload: MCPToolInvokePayload,
     request: Request,
+    x_aiops_api_key: str | None = Header(default=None),
+    authorization: str | None = Header(default=None),
 ) -> MCPToolCallResult:
-    """Invoke a read-only MCP tool (`query_prometheus`, `get_server_context`, `search_runbook`, `query_logs`)."""
+    """Invoke a registered MCP tool (`query_prometheus`, `query_domain_metrics`, `get_server_context`, etc.)."""
+    _verify_internal_api_key(request, x_aiops_api_key, authorization)
     agent = request.app.state.sasa_agent
     try:
         return await agent.mcp_tools.invoke_tool(payload.tool_name, payload.arguments)
@@ -160,17 +243,22 @@ async def call_mcp_tool(
 async def search_rag_runbooks(
     payload: RAGSearchPayload,
     request: Request,
+    x_aiops_api_key: str | None = Header(default=None),
+    authorization: str | None = Header(default=None),
 ) -> list[RunbookRetrievalResult]:
-    """Directly query the Phase 2.2 Runbook RAG Pipeline."""
+    """Directly query the Runbook RAG Pipeline."""
+    _verify_internal_api_key(request, x_aiops_api_key, authorization)
     agent = request.app.state.sasa_agent
     try:
         clean_query = InputSanitizer.inspect_text(payload.query, field_name="query")
-        return agent.rag_pipeline.retrieve(
-            clean_query,
-            os_type=payload.os_type,
-            service=payload.service,
-            top_k=payload.top_k,
-        )
+        retrieve_kwargs: dict[str, Any] = {
+            "os_type": payload.os_type,
+            "service": payload.service,
+            "top_k": payload.top_k,
+        }
+        if payload.domain is not None and "domain" in inspect.signature(agent.rag_pipeline.retrieve).parameters:
+            retrieve_kwargs["domain"] = payload.domain
+        return agent.rag_pipeline.retrieve(clean_query, **retrieve_kwargs)
     except GuardrailViolationError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -180,13 +268,21 @@ async def search_rag_runbooks(
 
 @router.post("/integrations/telegram/webhook", response_model=ApprovalRecord)
 async def telegram_approval_callback(
-    payload: TelegramCallbackPayload,
+    payload: dict[str, Any],
     request: Request,
+    x_telegram_bot_api_secret_token: str | None = Header(default=None),
 ) -> ApprovalRecord:
-    """Process an administrator Approve/Reject button click from Telegram (`5841901091`)."""
+    """Process an administrator Approve/Reject callback from Telegram (`Update` or flat payload)."""
+    _verify_telegram_webhook_secret(request, x_telegram_bot_api_secret_token)
     agent = request.app.state.sasa_agent
     try:
-        return agent.telegram_service.process_callback(payload)
+        callback_payload = agent.telegram_service.parse_telegram_update(payload)
+        record = agent.telegram_service.process_callback(callback_payload)
+        await agent.telegram_service.answer_callback_query(
+            callback_payload.callback_id,
+            f"Decision recorded: {record.status.value.upper()} ({record.approval_id})",
+        )
+        return record
     except PermissionError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

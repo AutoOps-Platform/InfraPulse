@@ -32,6 +32,8 @@ class JevDecisionRequest(BaseModel):
     alert_name: str
     declared_severity: str
     status: str
+    domain: str = "vm"
+    target_id: str = ""
     summary: str = ""
     labels: dict[str, str] = Field(default_factory=dict)
     annotations: dict[str, str] = Field(default_factory=dict)
