@@ -58,6 +58,7 @@ class AIOpsSettings(BaseSettings if _HAS_PYDANTIC_SETTINGS else BaseModel):  # t
     AIOPS_HOST: str = "127.0.0.1"
     AIOPS_PORT: int = Field(default=8001, ge=1, le=65535)
     AIOPS_WEBHOOK_SECRET: SecretStr = Field(default=SecretStr(""))
+    AIOPS_INTERNAL_API_KEY: SecretStr = Field(default=SecretStr(""))
 
     # Alert Storm & Response Cache Controls (Step 7)
     AIOPS_DEDUP_COOLDOWN_SECONDS: int = Field(default=300, ge=0, le=86400)
@@ -66,10 +67,13 @@ class AIOpsSettings(BaseSettings if _HAS_PYDANTIC_SETTINGS else BaseModel):  # t
 
     # Task 1: DeepSeek & Ollama Provider Settings
     AIOPS_DEFAULT_PROVIDER: Literal["deepseek", "gemini"] = "deepseek"
+    AIOPS_ENABLE_PROVIDER_FALLBACK: bool = True
     DEEPSEEK_MODE: Literal["ollama", "api", "auto"] = "ollama"
     DEEPSEEK_API_KEY: SecretStr = Field(default=SecretStr(""))
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com/v1"
     DEEPSEEK_MODEL: str = "deepseek-v4.1-flash"
+    DEEPSEEK_LIGHTWEIGHT_MODEL: str = "deepseek-chat"
+    DEEPSEEK_REASONING_MODEL: str = "deepseek-reasoner"
     DEEPSEEK_TIMEOUT_SECONDS: float = Field(default=30.0, gt=0.0, le=300.0)
 
     OLLAMA_BASE_URL: str = "http://localhost:11434/v1"
@@ -89,9 +93,25 @@ class AIOpsSettings(BaseSettings if _HAS_PYDANTIC_SETTINGS else BaseModel):  # t
     GEMINI_MODEL: str = "gemini-2.5-flash"
     GEMINI_TIMEOUT_SECONDS: float = Field(default=30.0, gt=0.0, le=300.0)
 
-    # Optional Telegram HITL Settings
+    # Amazon Managed Prometheus (AMP) SigV4 Settings (P0.2)
+    AMP_ENDPOINT: str = ""
+    AWS_REGION: str = "ap-southeast-1"
+    AWS_ACCESS_KEY_ID: SecretStr = Field(default=SecretStr(""))
+    AWS_SECRET_ACCESS_KEY: SecretStr = Field(default=SecretStr(""))
+    AWS_SESSION_TOKEN: SecretStr = Field(default=SecretStr(""))
+    AMP_TIMEOUT_SECONDS: float = Field(default=10.0, gt=0.0, le=60.0)
+
+    # Management Backend Live Inventory & SSL Context Settings (P1.1)
+    MANAGEMENT_API_BASE_URL: str = ""
+    MANAGEMENT_API_TOKEN: SecretStr = Field(default=SecretStr(""))
+    MANAGEMENT_API_TIMEOUT_SECONDS: float = Field(default=5.0, gt=0.0, le=60.0)
+
+    # Optional Telegram HITL Settings (P0.5)
     TELEGRAM_BOT_TOKEN: SecretStr = Field(default=SecretStr(""))
     TELEGRAM_ADMIN_CHAT_ID: str = ""
+    TELEGRAM_WEBHOOK_SECRET: SecretStr = Field(default=SecretStr(""))
+    TELEGRAM_POLLING_ENABLED: bool = False
+    TELEGRAM_POLL_INTERVAL_SECONDS: float = Field(default=2.0, gt=0.1, le=60.0)
 
     # Opt-in live connectivity test flag
     AIOPS_RUN_LIVE_TESTS: bool = False
