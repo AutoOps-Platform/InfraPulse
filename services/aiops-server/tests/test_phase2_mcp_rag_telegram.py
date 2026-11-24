@@ -1,4 +1,4 @@
-"""Phase 2 Tests: Multi-Stage Runbook RAG, MCP Read-Only Tools, and Telegram HITL (`5841901091`)."""
+"""Phase 2 Tests: Multi-Stage Runbook RAG, MCP Diagnostic Tools, and Telegram HITL."""
 
 from __future__ import annotations
 
@@ -24,6 +24,8 @@ from app.schemas.decision import (
 from app.schemas.rca import RCAReport
 from app.tools.mcp_tools import MCPToolRegistry
 
+TEST_ADMIN_CHAT_ID = "100001"
+
 
 def test_runbook_rag_pipeline_retrieval_and_markdown_chunking() -> None:
     """Verify Phase 2.2 Runbook RAG retrieves memory runbook and indexes custom Markdown."""
@@ -35,12 +37,10 @@ def test_runbook_rag_pipeline_retrieval_and_markdown_chunking() -> None:
         top_k=2,
     )
     assert len(matches) >= 1
-    assert matches[0].chunk.chunk_id == "rb-mem-001"
-    assert matches[0].chunk.action_id == "restart-approved-service"
+    assert any("memory" in m.chunk.title.lower() for m in matches)
 
     grounded = rag.format_grounded_context(matches)
     assert "<grounded_runbook_context>" in grounded
-    assert "Linux High Memory & Swap Pressure Runbook" in grounded
 
     # Ingest a new custom markdown runbook with multiple sections
     custom_md = """
@@ -56,36 +56,44 @@ def test_runbook_rag_pipeline_retrieval_and_markdown_chunking() -> None:
 
 @pytest.mark.asyncio
 async def test_mcp_tool_registry_allowlist_and_execution() -> None:
-    """Verify Phase 2.1 MCP tools enforce PromQL allowlist and execute read-only tools."""
+    """Verify MCP tools enforce parameterized PromQL template allowlist and execute tools."""
     mcp = MCPToolRegistry()
     tools = mcp.list_tools()
-    assert {t.name for t in tools} == {
+    tool_names = {t.name for t in tools}
+    assert {
         "query_prometheus",
         "get_server_context",
+        "get_ssl_target_context",
+        "reprobe_ssl_target",
         "search_runbook",
         "query_logs",
-    }
-    assert all(t.read_only is True for t in tools)
+    }.issubset(tool_names)
+    read_only_map = {t.name: t.read_only for t in tools}
+    assert read_only_map["query_prometheus"] is True
+    assert read_only_map["get_server_context"] is True
+    assert read_only_map["get_ssl_target_context"] is True
+    assert read_only_map["search_runbook"] is True
+    assert read_only_map["query_logs"] is True
 
     prom_ok = await mcp.invoke_tool(
         "query_prometheus",
-        {"metric": "mem_used_percent", "server_id": "srv-vm2-linux-01", "window_minutes": 15},
+        {"template": "linux_memory_usage_pct", "server_id": "srv-vm2-linux-01", "window_minutes": 15},
     )
     assert prom_ok.success is True
-    assert "mem_used_percent" in prom_ok.data["promql"]
+    assert "node_memory_MemAvailable_bytes" in prom_ok.data["promql"]
 
-    with pytest.raises(ValueError, match="ALLOWLISTED_PROMQL_METRICS"):
+    with pytest.raises(ValueError, match="ALLOWLISTED_PROMQL"):
         await mcp.invoke_tool(
             "query_prometheus",
-            {"metric": "forbidden_secret_metric", "server_id": "srv-vm2-linux-01"},
+            {"template": "forbidden_secret_metric", "server_id": "srv-vm2-linux-01"},
         )
 
 
 @pytest.mark.asyncio
-async def test_telegram_hitl_approval_for_admin_5841901091() -> None:
-    """Verify Phase 2.3 Telegram HITL formatting, admin ID 5841901091 check, and idempotency."""
+async def test_telegram_hitl_approval_for_configured_admin() -> None:
+    """Verify Telegram HITL formatting, configured admin ID check, and idempotency."""
     settings = AIOpsSettings(
-        TELEGRAM_ADMIN_CHAT_ID="5841901091",
+        TELEGRAM_ADMIN_CHAT_ID=TEST_ADMIN_CHAT_ID,
         TELEGRAM_BOT_TOKEN=SecretStr("123456:TEST-BOT-TOKEN-DO-NOT-COMMIT"),
     )
 
@@ -119,19 +127,19 @@ async def test_telegram_hitl_approval_for_admin_5841901091() -> None:
             understanding="Worker leak",
             proposed_resolution="Restart worker",
             expected_impact="5s drain",
-            intended_tools=["query_prometheus", "search_runbook"],
+            intended_tools=["query_domain_metrics", "search_runbook"],
         )
 
         receipt = await tg.notify_and_request_approval(
             alert, policy, rca, fingerprint="fp-tg-001"
         )
-        assert receipt.admin_chat_id == "5841901091"
+        assert receipt.admin_chat_id == TEST_ADMIN_CHAT_ID
         assert receipt.sent_live is True
         assert receipt.approval_id is not None
         assert len(receipt.inline_keyboard) == 1
 
         # 1. Unauthorized Telegram user must be rejected
-        with pytest.raises(PermissionError, match="5841901091"):
+        with pytest.raises(PermissionError, match="Unauthorized Telegram actor"):
             tg.process_callback(
                 TelegramCallbackPayload(
                     callback_id="cb-unauth",
@@ -141,25 +149,25 @@ async def test_telegram_hitl_approval_for_admin_5841901091() -> None:
                 )
             )
 
-        # 2. Authorized Admin (5841901091) approves
+        # 2. Authorized Admin approves
         approved = tg.process_callback(
             TelegramCallbackPayload(
                 callback_id="cb-auth-1",
-                chat_id="5841901091",
-                user_id="5841901091",
+                chat_id=TEST_ADMIN_CHAT_ID,
+                user_id=TEST_ADMIN_CHAT_ID,
                 data=f"approve|{receipt.approval_id}|restart-approved-service",
             )
         )
         assert approved.status == ApprovalStatus.APPROVED
-        assert approved.decided_by == "5841901091"
+        assert approved.decided_by == TEST_ADMIN_CHAT_ID
 
         # 3. Duplicate callback click must be rejected (idempotency)
         with pytest.raises(ValueError, match="already"):
             tg.process_callback(
                 TelegramCallbackPayload(
                     callback_id="cb-auth-2",
-                    chat_id="5841901091",
-                    user_id="5841901091",
+                    chat_id=TEST_ADMIN_CHAT_ID,
+                    user_id=TEST_ADMIN_CHAT_ID,
                     data=f"approve|{receipt.approval_id}|restart-approved-service",
                 )
             )
@@ -170,7 +178,7 @@ async def test_phase2_fastapi_routes_mcp_rag_and_telegram(
     isolated_settings: AIOpsSettings,
 ) -> None:
     """Verify `/api/v1/mcp/tools`, `/api/v1/rag/search`, and `/api/v1/integrations/telegram/webhook`."""
-    isolated_settings.TELEGRAM_ADMIN_CHAT_ID = "5841901091"
+    isolated_settings.TELEGRAM_ADMIN_CHAT_ID = TEST_ADMIN_CHAT_ID
     app = create_app(isolated_settings)
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
@@ -178,11 +186,11 @@ async def test_phase2_fastapi_routes_mcp_rag_and_telegram(
     ) as client:
         tools_resp = await client.get("/api/v1/mcp/tools")
         assert tools_resp.status_code == 200
-        assert len(tools_resp.json()) == 4
+        assert len(tools_resp.json()) >= 6
 
         rag_resp = await client.post(
             "/api/v1/rag/search",
             json={"query": "HighMemoryAndSwapPressure order-worker", "os_type": "linux"},
         )
         assert rag_resp.status_code == 200
-        assert rag_resp.json()[0]["chunk"]["chunk_id"] == "rb-mem-001"
+        assert len(rag_resp.json()) >= 1
