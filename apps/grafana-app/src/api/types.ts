@@ -53,6 +53,36 @@ export interface ServerInput {
   environment: string;
   metadata?: Record<string, unknown>;
 }
+export interface SslTarget {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  group: string;
+  enabled: boolean;
+  subjectCn: string | null;
+  issuerCn: string | null;
+  serialNumber: string | null;
+  notBefore: string | null;
+  notAfter: string | null;
+  authorized: boolean | null;
+  lastProbedAt: string | null;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface CreateSslTargetInput {
+  name: string;
+  host: string;
+  port?: number;
+  group?: string;
+  enabled?: boolean;
+}
+export interface PatchSslTargetInput {
+  name?: string;
+  group?: string;
+  enabled?: boolean;
+}
 export type Filters = Record<string, string | number | undefined>;
 
 // Closed B1 public contract, mirrored from onboarding.types.ts (not provider errors).

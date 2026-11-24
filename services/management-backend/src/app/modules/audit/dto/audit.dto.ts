@@ -85,7 +85,8 @@ export interface AuditEvent {
       | 'profile'
       | 'profile_version'
       | 'group'
-      | 'onboarding';
+      | 'onboarding'
+      | 'ssl_target';
     readonly id: string;
   };
   readonly outcome: 'success' | 'failed' | 'denied';

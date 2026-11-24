@@ -20,6 +20,7 @@ const linuxName = 'dashboards/linux-host.json';
 const windowsName = 'dashboards/windows-host.json';
 const containersName = 'dashboards/containers.json';
 const containerDetailName = 'dashboards/container-detail.json';
+const sslName = 'dashboards/ssl-certs.json';
 const linux = JSON.stringify({ uid: 'infrapulse-linux-host', title: 'VM Detail' });
 const windows = JSON.stringify({ uid: 'infrapulse-windows-host', title: 'VM Detail (Windows)' });
 const fleetName = 'dashboards/fleet.json';
@@ -33,6 +34,7 @@ test('plans all canonical JSON dashboards at owned live keys, not the manifest',
     [containersName, 'grafana/dashboards/live/containers.json', 'infrapulse-containers'],
     [fleetName, 'grafana/dashboards/live/fleet.json', 'infrapulse-fleet'],
     [linuxName, 'grafana/dashboards/live/linux-host.json', 'infrapulse-linux-host'],
+    [sslName, 'grafana/dashboards/live/ssl-certs.json', 'infrapulse-ssl'],
     [windowsName, 'grafana/dashboards/live/windows-host.json', 'infrapulse-windows-host'],
   ].map(([name, key, uid]) => ({
     bucket: 'infrapulse-lab-123-dash-123456789012', key, accountId: '123456789012',
@@ -77,6 +79,7 @@ test('CLI dry run compiles locally and reports only public target metadata', asy
       { key: 'grafana/dashboards/live/containers.json', uid: 'infrapulse-containers' },
       { key: 'grafana/dashboards/live/fleet.json', uid: 'infrapulse-fleet' },
       { key: 'grafana/dashboards/live/linux-host.json', uid: 'infrapulse-linux-host' },
+      { key: 'grafana/dashboards/live/ssl-certs.json', uid: 'infrapulse-ssl' },
       { key: 'grafana/dashboards/live/windows-host.json', uid: 'infrapulse-windows-host' },
     ],
   });
@@ -107,7 +110,7 @@ test('publish puts exact bodies with expected owner and stops on the first failu
     ['s3api', 'put-object', '--bucket', target.bucket, '--key', 'grafana/dashboards/live/containers.json',
       '--expected-bucket-owner', '123456789012', '--region', 'ap-southeast-1', '--content-type', 'application/json', '--body'],
   ]);
-  assert.deepEqual(failure, { ok: false, code: 'DASHBOARD_UPLOAD_UNCONFIRMED', confirmed: 1, total: 5 });
+  assert.deepEqual(failure, { ok: false, code: 'DASHBOARD_UPLOAD_UNCONFIRMED', confirmed: 1, total: 6 });
   for (const path of paths) await assert.rejects(stat(path), { code: 'ENOENT' });
 });
 

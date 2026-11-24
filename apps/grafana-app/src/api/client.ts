@@ -9,6 +9,9 @@ import type {
   RetryIntent,
   OnboardingProgress,
   ServerInput,
+  SslTarget,
+  CreateSslTargetInput,
+  PatchSslTargetInput,
 } from './types';
 import {
   parseOnboardingProgress,
@@ -171,4 +174,10 @@ export const api = {
     progress(await request<unknown>(`api/v1/servers/${id(serverId)}/decommission`, 'POST', intent(input), signal), serverId),
   archiveServer: (serverId: string) => request<void>(`api/v1/servers/${id(serverId)}`, 'DELETE'),
   deleteServer: (serverId: string) => request<void>(`api/v1/servers/${id(serverId)}?force=true`, 'DELETE'),
+  sslTargets: (signal?: AbortSignal) => request<{ items: SslTarget[] }>('api/v1/ssl-targets', 'GET', undefined, signal),
+  createSslTarget: (input: CreateSslTargetInput) => request<SslTarget>('api/v1/ssl-targets', 'POST', input),
+  updateSslTarget: (targetId: string, input: PatchSslTargetInput) =>
+    request<SslTarget>(`api/v1/ssl-targets/${id(targetId)}`, 'PATCH', input),
+  probeSslTarget: (targetId: string) => request<SslTarget>(`api/v1/ssl-targets/${id(targetId)}/probe`, 'POST', {}),
+  deleteSslTarget: (targetId: string) => request<void>(`api/v1/ssl-targets/${id(targetId)}`, 'DELETE'),
 };

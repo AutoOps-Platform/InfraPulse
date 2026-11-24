@@ -24,10 +24,11 @@ function routes() {
 const id = '11111111-1111-4111-8111-111111111111';
 const vmRoot = '/grafana/a/infrapulse-infrapulse-app/vms';
 
-test('plugin offers one default VM menu to Viewers', () => {
+test('plugin offers default VM menu and SSL Certificates menu to Viewers', () => {
   const pages = manifest.includes.filter(({ addToNav, type }) => type === 'page' && addToNav);
   assert.deepEqual(pages.map(({ name, path, defaultNav, role }) => [name, path, defaultNav, role]), [
     ['VMs', '/a/infrapulse-infrapulse-app/vms', true, 'Viewer'],
+    ['SSL Certificates', '/a/infrapulse-infrapulse-app/ssl', false, 'Viewer'],
   ]);
 });
 

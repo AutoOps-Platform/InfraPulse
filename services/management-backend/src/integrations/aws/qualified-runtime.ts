@@ -10,7 +10,8 @@ import {
 import type { CommandFactory } from '../../app/modules/onboarding/services/onboarding-worker.service.js';
 import { validateAwsConfig, type AwsConfig } from '../../config/app.config.js';
 import type { AwsContractBinding, AwsPort, MetricSpec } from './aws.port.js';
-import { AwsSdkAdapter } from './aws-sdk.adapter.js';
+import type { AmpRemoteWriteFn } from './amp-remote-write.js';
+import { AwsSdkAdapter, createAmpRemoteWriter } from './aws-sdk.adapter.js';
 import { loadAgentRelease, type AgentRelease } from './release-config.js';
 
 export interface MetricPresentation {
@@ -33,6 +34,7 @@ export interface QualifiedMetricContract {
 export interface QualifiedRuntime extends QualifiedMetricContract {
   readonly assets: BootstrapAssetsPort;
   readonly aws: AwsPort;
+  readonly ampRemoteWrite?: AmpRemoteWriteFn;
   readonly command: CommandFactory;
   readonly presetMatches: PresetMatcher;
   readonly accountClaim: 'CallerConfigNoAccountAttestationClaim';
@@ -201,6 +203,7 @@ export async function createQualifiedRuntime(env: NodeJS.ProcessEnv): Promise<Qu
         };
       },
       aws: new AwsSdkAdapter(config, undefined, undefined, release, credentials),
+      ampRemoteWrite: createAmpRemoteWriter(config, credentials),
       accountClaim: 'CallerConfigNoAccountAttestationClaim' as const,
     });
   } catch {

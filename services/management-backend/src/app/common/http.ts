@@ -19,6 +19,7 @@ import type { ManagementConfig } from '../../config/app.config.js';
 import { AuditDto } from '../modules/audit/dto/audit.dto.js';
 import { GroupDto } from '../modules/groups/dto/groups.dto.js';
 import { ServerDto } from '../modules/servers/dto/servers.dto.js';
+import { SslTargetDto } from '../modules/ssl-targets/dto/ssl-targets.dto.js';
 import { ApiError, systemClock, type ApiCode, type Clock } from './errors.js';
 import { UUID_PATTERN, parseStrictJson } from './pagination.js';
 
@@ -314,7 +315,7 @@ export function managementOpenApi(app: INestApplication) {
     .build();
 
   return SwaggerModule.createDocument(app, config, {
-    extraModels: [ApiErrorDto, MeDto, ServerDto, GroupDto, AuditDto],
+    extraModels: [ApiErrorDto, MeDto, ServerDto, GroupDto, AuditDto, SslTargetDto],
   });
 }
 

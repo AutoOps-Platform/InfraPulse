@@ -1,0 +1,6 @@
+{
+  "format": "infrapulse-ssl-template-v1",
+  "uid": "infrapulse-ssl",
+  "title": "Hạn chứng chỉ SSL",
+  "description": "Giám sát hạn chứng chỉ SSL/TLS cho cả Endpoint HTTPS bên ngoài (quản lý từ UI) và chứng chỉ Local tự quét trên VM Linux/Windows, theo bố cục X509 Certificate Exporter (13922)."
+}

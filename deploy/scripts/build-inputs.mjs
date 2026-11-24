@@ -9,6 +9,7 @@ const ALLOWED = new Set([
   'observability/grafana/dashboards/infrapulse/containers.json',
   'observability/grafana/dashboards/infrapulse/fleet.json',
   'observability/grafana/dashboards/infrapulse/linux-host.json',
+  'observability/grafana/dashboards/infrapulse/ssl-certs.json',
   'observability/grafana/dashboards/infrapulse/windows-host.json',
 ]);
 

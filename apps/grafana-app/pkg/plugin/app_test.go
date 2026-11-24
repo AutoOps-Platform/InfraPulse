@@ -92,6 +92,13 @@ func TestManagementRouteAllowlistAndQueryBinding(t *testing.T) {
 	if got, err := managementTarget("DELETE", forceDelete, "api/v1/servers/11111111-1111-4111-8111-111111111111"); err != nil || got != "/"+forceDelete {
 		t.Error("force delete route was rejected")
 	}
+	if got, err := managementTarget("POST", "api/v1/ssl-targets", "api/v1/ssl-targets"); err != nil || got != "/api/v1/ssl-targets" {
+		t.Error("ssl-targets create route was rejected")
+	}
+	probeRoute := "api/v1/ssl-targets/11111111-1111-4111-8111-111111111111/probe"
+	if got, err := managementTarget("POST", probeRoute, probeRoute); err != nil || got != "/"+probeRoute {
+		t.Error("ssl-targets probe route was rejected")
+	}
 	cases := [][3]string{
 		{"GET", "https://attacker.invalid/api/v1/me", "api/v1/me"},
 		{"GET", "//attacker.invalid/api/v1/me", "api/v1/me"},

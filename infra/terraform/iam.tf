@@ -273,6 +273,13 @@ resource "aws_iam_role_policy" "central_runtime" {
           Null                        = { "aws:TagKeys" = "false" }
         }
       },
+      {
+        Sid       = "AmpExternalSslRemoteWrite"
+        Effect    = "Allow"
+        Action    = "aps:RemoteWrite"
+        Resource  = local.amp_workspace_arn
+        Condition = local.regional_condition
+      },
     ]
   })
 }

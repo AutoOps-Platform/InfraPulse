@@ -53,6 +53,10 @@ const INVENTORY_DELTA_KEYS = new Set([
   'retire_at',
   'revoked_at',
   'scopes',
+  'host',
+  'port',
+  'group_name',
+  'enabled',
 ]);
 
 const ALLOWED_RESOURCE_TYPES = [
@@ -63,6 +67,7 @@ const ALLOWED_RESOURCE_TYPES = [
   'profile_version',
   'group',
   'onboarding',
+  'ssl_target',
 ] as const;
 
 const ALLOWED_OPERATIONS = [

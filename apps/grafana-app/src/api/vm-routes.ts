@@ -29,6 +29,11 @@ export function fleetHref(): string | undefined {
   return prefix === undefined ? undefined : `${prefix}/d/infrapulse-fleet`;
 }
 
+export function sslDashboardHref(): string | undefined {
+  const prefix = grafanaSubpath();
+  return prefix === undefined ? undefined : `${prefix}/d/infrapulse-ssl`;
+}
+
 export function vmMetricsHref(serverId: string, platform: 'linux' | 'windows' = 'linux'): string | undefined {
   const prefix = grafanaSubpath();
   if (prefix === undefined || !isUuid(serverId)) return undefined;
