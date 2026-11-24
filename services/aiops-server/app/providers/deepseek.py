@@ -1,10 +1,13 @@
-"""Task 1: Unified DeepSeek Cloud API and Ollama Local Inference Provider.
+"""Task 1 & P1.3: Unified DeepSeek Cloud API and Ollama Local Inference Provider.
 
 Supports:
 1. Local Ollama inference (`http://localhost:11434/v1`) for `deepseek-r1:latest`
    or `deepseek-v4.1-flash` with zero external API key required.
 2. DeepSeek Cloud API (`https://api.deepseek.com/v1`) authenticated via
-   `DEEPSEEK_API_KEY` from environment variables.
+   `DEEPSEEK_API_KEY` from environment variables, with model-tier routing:
+   - `lightweight` -> `DEEPSEEK_LIGHTWEIGHT_MODEL` (default `deepseek-chat`)
+   - `standard` -> `DEEPSEEK_MODEL`
+   - `reasoning` -> `DEEPSEEK_REASONING_MODEL` (default `deepseek-reasoner`)
 3. Optional PydanticAI model construction (`build_pydantic_ai_model`) preserving
    full compatibility with `services/aiops-server/agent.py`.
 """
@@ -63,6 +66,32 @@ class DeepSeekProvider(BaseLLMProvider):
             return self.settings.DEEPSEEK_TIMEOUT_SECONDS
         return self.settings.OLLAMA_TIMEOUT_SECONDS
 
+    def is_configured(self) -> bool:
+        """Return True when the active DeepSeek backend has required configuration."""
+        if self.backend_mode == "ollama":
+            return bool(self.settings.OLLAMA_BASE_URL.strip())
+        return bool(self.settings.DEEPSEEK_API_KEY.get_secret_value().strip())
+
+    def resolve_model(
+        self,
+        *,
+        model_tier: str | None = None,
+        model_override: str | None = None,
+    ) -> str:
+        """Resolve the target model name for the requested tier or explicit override."""
+        if model_override and model_override.strip():
+            return model_override.strip()
+
+        if self.backend_mode == "ollama":
+            return self.settings.OLLAMA_MODEL
+
+        tier = (model_tier or "").lower().strip()
+        if tier == "lightweight":
+            return str(getattr(self.settings, "DEEPSEEK_LIGHTWEIGHT_MODEL", "deepseek-chat"))
+        if tier == "reasoning":
+            return str(getattr(self.settings, "DEEPSEEK_REASONING_MODEL", "deepseek-reasoner"))
+        return self.settings.DEEPSEEK_MODEL
+
     def _build_headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
         if self.backend_mode == "api":
@@ -108,13 +137,23 @@ class DeepSeekProvider(BaseLLMProvider):
                 provider=OllamaProvider(base_url=self.base_url),
             )
 
-    async def generate(self, request: InferenceRequest) -> InferenceResponse:
+    async def generate(
+        self,
+        request: InferenceRequest,
+        *,
+        model_tier: str | None = None,
+        model_override: str | None = None,
+    ) -> InferenceResponse:
         """Send an OpenAI-compatible chat completion request to DeepSeek API or Ollama."""
         headers = self._build_headers()
         url = f"{self.base_url}/chat/completions"
+        resolved_model = self.resolve_model(
+            model_tier=model_tier,
+            model_override=model_override or request.model_override,
+        )
 
         payload: dict[str, Any] = {
-            "model": self.model_name,
+            "model": resolved_model,
             "messages": [
                 {"role": "system", "content": request.system_prompt},
                 {"role": "user", "content": request.user_prompt},
@@ -157,7 +196,7 @@ class DeepSeekProvider(BaseLLMProvider):
         return InferenceResponse(
             provider_name=self.provider_name,
             backend_mode=self.backend_mode,
-            model_name=str(data.get("model") or self.model_name),
+            model_name=str(data.get("model") or resolved_model),
             content=str(content),
             prompt_tokens=int(usage.get("prompt_tokens") or 0),
             completion_tokens=int(usage.get("completion_tokens") or 0),

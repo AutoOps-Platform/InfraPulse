@@ -20,8 +20,12 @@ from app.schemas.decision import (
 )
 
 # Pre-registered safe actions eligible for LOW-severity automation (INTRODUCT.md 11.3 & 11.6)
+# NOTE: Mutating restarts (`restart-approved-container`, `restart-approved-service`) MUST NEVER
+# appear in this allowlist; they strictly require administrator HITL approval.
 ALLOWLISTED_LOW_RISK_ACTIONS: frozenset[str] = frozenset(
     {
+        "reprobe-ssl-target",
+        "collect-container-diagnostics",
         "cleanup-temp-directory",
         "rotate-noncritical-logs",
         "refresh-metrics-collector-cache",

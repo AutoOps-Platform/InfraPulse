@@ -1,4 +1,4 @@
-"""Gemini API Provider adapter preserving compatibility with existing Gemini API keys."""
+"""P1.3: Gemini API Provider adapter with JSON response_format and live /models health probe."""
 
 from __future__ import annotations
 
@@ -33,8 +33,27 @@ class GeminiProvider(BaseLLMProvider):
         return "gemini"
 
     @property
+    def base_url(self) -> str:
+        return self.settings.GEMINI_BASE_URL.rstrip("/")
+
+    @property
     def model_name(self) -> str:
         return self.settings.GEMINI_MODEL
+
+    def is_configured(self) -> bool:
+        """Return True when `GEMINI_API_KEY` is populated."""
+        return bool(self.settings.GEMINI_API_KEY.get_secret_value().strip())
+
+    def resolve_model(
+        self,
+        *,
+        model_tier: str | None = None,
+        model_override: str | None = None,
+    ) -> str:
+        """Resolve Gemini model name, honoring explicit `model_override` when given."""
+        if model_override and model_override.strip():
+            return model_override.strip()
+        return self.model_name
 
     def _build_headers(self) -> dict[str, str]:
         api_key = self.settings.GEMINI_API_KEY.get_secret_value().strip()
@@ -45,12 +64,22 @@ class GeminiProvider(BaseLLMProvider):
             "Authorization": f"Bearer {api_key}",
         }
 
-    async def generate(self, request: InferenceRequest) -> InferenceResponse:
+    async def generate(
+        self,
+        request: InferenceRequest,
+        *,
+        model_tier: str | None = None,
+        model_override: str | None = None,
+    ) -> InferenceResponse:
         headers = self._build_headers()
-        base_url = self.settings.GEMINI_BASE_URL.rstrip("/")
-        url = f"{base_url}/chat/completions"
+        url = f"{self.base_url}/chat/completions"
+        resolved_model = self.resolve_model(
+            model_tier=model_tier,
+            model_override=model_override or request.model_override,
+        )
+
         payload: dict[str, Any] = {
-            "model": self.model_name,
+            "model": resolved_model,
             "messages": [
                 {"role": "system", "content": request.system_prompt},
                 {"role": "user", "content": request.user_prompt},
@@ -58,6 +87,8 @@ class GeminiProvider(BaseLLMProvider):
             "temperature": request.temperature,
             "max_tokens": request.max_tokens,
         }
+        if request.response_json:
+            payload["response_format"] = {"type": "json_object"}
 
         started = time.perf_counter()
         owns_client = self._client is None
@@ -84,7 +115,7 @@ class GeminiProvider(BaseLLMProvider):
         return InferenceResponse(
             provider_name=self.provider_name,
             backend_mode="api",
-            model_name=str(data.get("model") or self.model_name),
+            model_name=str(data.get("model") or resolved_model),
             content=str(content),
             prompt_tokens=int(usage.get("prompt_tokens") or 0),
             completion_tokens=int(usage.get("completion_tokens") or 0),
@@ -92,11 +123,44 @@ class GeminiProvider(BaseLLMProvider):
         )
 
     async def health_check(self) -> dict[str, object]:
-        has_key = bool(self.settings.GEMINI_API_KEY.get_secret_value().strip())
-        return {
-            "provider": self.provider_name,
-            "backend_mode": "api",
-            "model": self.model_name,
-            "configured": has_key,
-            "reachable": has_key,
-        }
+        """Perform a live `GET {base_url}/models` probe against the Gemini OpenAI endpoint."""
+        try:
+            headers = self._build_headers()
+        except ProviderError as exc:
+            return {
+                "provider": self.provider_name,
+                "backend_mode": "api",
+                "model": self.model_name,
+                "configured": False,
+                "reachable": False,
+                "detail": str(exc),
+            }
+
+        url = f"{self.base_url}/models"
+        owns_client = self._client is None
+        client = self._client or httpx.AsyncClient(
+            timeout=min(self.settings.GEMINI_TIMEOUT_SECONDS, 5.0)
+        )
+        try:
+            resp = await client.get(url, headers=headers)
+            reachable = resp.status_code < 400
+            return {
+                "provider": self.provider_name,
+                "backend_mode": "api",
+                "model": self.model_name,
+                "configured": True,
+                "reachable": reachable,
+                "status_code": resp.status_code,
+            }
+        except httpx.HTTPError:
+            return {
+                "provider": self.provider_name,
+                "backend_mode": "api",
+                "model": self.model_name,
+                "configured": True,
+                "reachable": False,
+                "status_code": None,
+            }
+        finally:
+            if owns_client:
+                await client.aclose()

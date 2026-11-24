@@ -19,6 +19,7 @@ class InferenceRequest(BaseModel):
     temperature: float = Field(default=0.1, ge=0.0, le=2.0)
     max_tokens: int = Field(default=1024, ge=1, le=16384)
     response_json: bool = True
+    model_override: str | None = None
 
 
 class InferenceResponse(BaseModel):
@@ -31,6 +32,7 @@ class InferenceResponse(BaseModel):
     prompt_tokens: int = 0
     completion_tokens: int = 0
     latency_ms: float = 0.0
+    fallback_used: bool = False
 
 
 class BaseLLMProvider(ABC):

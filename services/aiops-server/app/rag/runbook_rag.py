@@ -1,11 +1,11 @@
-"""Phase 2.2: Multi-Stage Runbook RAG Pipeline (`services/aiops-server/app/rag/runbook_rag.py`).
+"""Phase 2.2 & P1.2: Multi-Stage Runbook RAG Pipeline (`services/aiops-server/app/rag/runbook_rag.py`).
 
 Implements a 6-stage local-first RAG pipeline:
-1. Document Ingestion (built-in InfraPulse SRE runbooks + optional markdown directory scan)
-2. Semantic Markdown Section Chunking (by `##` / `###` headers with OS/service/alert metadata)
-3. Hybrid Indexing (TF-IDF lexical vectors + metadata tag index + optional Ollama embedding hook)
-4. Query Formulation (extracts alert name, server role, OS, and symptom keywords)
-5. Hybrid Retrieval & Metadata Reranking (cosine similarity + tag match boost)
+1. Document Ingestion (curated built-in InfraPulse SRE runbooks + automatic `runbooks/*.md` scan)
+2. Semantic Markdown Section Chunking (by `##` / `###` headers with domain/OS/service/alert metadata)
+3. Hybrid Indexing (TF-IDF lexical vectors + metadata tag index)
+4. Query Formulation (extracts alert name, domain, server role, OS, and symptom keywords)
+5. Hybrid Retrieval & Metadata Reranking (cosine similarity + domain/OS/service/keyword boost)
 6. Grounded Prompt Formatting (`<grounded_runbook_context>` block for SaSa AI)
 """
 
@@ -19,6 +19,12 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 _WORD_RE = re.compile(r"[a-z0-9_]{2,}")
+_ACTION_RE = re.compile(r"\*\*Recommended Action:\*\*\s*`([^`]+)`", re.IGNORECASE)
+_DOMAIN_RE = re.compile(r"\*\*Domain:\*\*\s*`([^`]+)`", re.IGNORECASE)
+_OS_RE = re.compile(r"\*\*OS:\*\*\s*`([^`]+)`", re.IGNORECASE)
+_SIGNALS_RE = re.compile(r"\*\*Signals:\*\*\s*(.+)", re.IGNORECASE)
+
+DEFAULT_RUNBOOKS_DIR: Path = Path(__file__).resolve().parents[2] / "runbooks"
 
 
 class RunbookChunk(BaseModel):
@@ -27,6 +33,7 @@ class RunbookChunk(BaseModel):
     chunk_id: str
     title: str
     source: str
+    domain: str = "vm"
     os_type: str = "any"
     service_tags: list[str] = Field(default_factory=list)
     alert_keywords: list[str] = Field(default_factory=list)
@@ -42,34 +49,47 @@ class RunbookRetrievalResult(BaseModel):
     matched_terms: list[str] = Field(default_factory=list)
 
 
-# Built-in curated InfraPulse SRE runbook corpus so RAG works out-of-the-box
+# Built-in curated InfraPulse SRE runbook corpus (grounded in AWS SSM + Grafana Alloy + AMP)
 DEFAULT_RUNBOOK_CHUNKS: tuple[RunbookChunk, ...] = (
     RunbookChunk(
         chunk_id="rb-mem-001",
         title="Linux High Memory & Swap Pressure Runbook",
-        source="docs/runbooks/linux-memory-pressure.md#high-memory-swap",
+        source="runbooks/linux-vm.md#high-memory-swap",
+        domain="vm",
         os_type="linux",
         service_tags=["order-worker", "application-node", "java", "python", "worker"],
-        alert_keywords=["highmemoryandswappressure", "highmemoryusage", "memory", "swap", "oom", "rss"],
+        alert_keywords=[
+            "highmemoryandswappressure",
+            "highmemoryusage",
+            "linuxmemoryhigh",
+            "memory",
+            "swap",
+            "oom",
+            "rss",
+        ],
         action_id="restart-approved-service",
         content=(
-            "1. Pre-check: Query Prometheus `mem_used_percent` and `swap_used_percent` over the last 15m.\n"
-            "2. Verify whether memory growth is confined to an allowlisted worker service (e.g., `order-worker`).\n"
-            "3. For MEDIUM severity (90%-96% RAM), do NOT auto-restart without administrator HITL approval.\n"
+            "1. Pre-check: Query AMP `node_memory_MemAvailable_bytes`, `node_memory_MemTotal_bytes`, "
+            "`node_memory_SwapFree_bytes`, and `node_pressure_memory_waiting_seconds_total` over the last 15m.\n"
+            "2. Verify whether memory growth is confined to an approved worker service (e.g., `order-worker`) "
+            "using `get_server_context` (`server_id`, `managed_node_id`).\n"
+            "3. For MEDIUM severity (85%-95% RAM), do NOT auto-restart without administrator HITL approval.\n"
             "4. Propose `restart-approved-service` via Telegram HITL with expected connection-drain impact.\n"
-            "5. Post-check: Confirm `mem_used_percent < 75%` within 5 minutes of approved service restart."
+            "5. Post-check: Confirm Linux memory utilization drops below 75% within 5 minutes of approved restart."
         ),
     ),
     RunbookChunk(
         chunk_id="rb-cpu-001",
         title="High CPU Utilization & Runaway Process Triage",
-        source="docs/runbooks/cpu-saturation.md#cpu-high",
+        source="runbooks/linux-vm.md#cpu-high",
+        domain="vm",
         os_type="any",
         service_tags=["web", "api", "worker", "compute"],
-        alert_keywords=["cpuhigh", "highcpu", "cpu", "load", "saturation", "throttling"],
+        alert_keywords=["cpuhigh", "highcpu", "linuxcpuhigh", "cpu", "load", "saturation", "throttling"],
         action_id="restart-approved-service",
         content=(
-            "1. Pre-check: Query Prometheus `cpu_usage_active` and `system_load1` over 15m.\n"
+            "1. Pre-check: Query AMP `node_cpu_seconds_total{mode=\"idle\"}`, `node_load1`, and "
+            "`node_pressure_cpu_waiting_seconds_total` (or `windows_cpu_time_total` on Windows) over 15m.\n"
             "2. Check if high CPU correlates with a legitimate traffic spike or runaway worker thread.\n"
             "3. Request administrator HITL approval before restarting any production worker service."
         ),
@@ -77,30 +97,33 @@ DEFAULT_RUNBOOK_CHUNKS: tuple[RunbookChunk, ...] = (
     RunbookChunk(
         chunk_id="rb-disk-001",
         title="Disk Space Low & Temporary Directory Cleanup Runbook",
-        source="docs/runbooks/disk-cleanup.md#temp-cleanup",
+        source="runbooks/linux-vm.md#temp-cleanup",
+        domain="vm",
         os_type="linux",
         service_tags=["storage", "logging", "tmp", "cache"],
-        alert_keywords=["diskspacelow", "temp_cleanup_needed", "disk", "tmp", "log_rotate", "inode"],
+        alert_keywords=["diskspacelow", "linuxdisklow", "temp_cleanup_needed", "disk", "tmp", "log_rotate", "inode"],
         action_id="cleanup-temp-directory",
         content=(
-            "1. Pre-check: Inspect disk usage on `/tmp` and `/var/log` via Prometheus `disk_used_percent`.\n"
+            "1. Pre-check: Inspect filesystem availability via AMP `node_filesystem_avail_bytes` and "
+            "`node_filesystem_size_bytes` (Grafana Alloy excludes virtual mounts).\n"
             "2. If severity is LOW and alert targets `/tmp` or non-critical cache directories, "
             "action `cleanup-temp-directory` or `rotate-noncritical-logs` is allowlisted.\n"
-            "3. Never delete database volumes (`postgres_data`, `prometheus_data`, `grafana_data`)."
+            "3. Never delete persistent application data directories or active Grafana Alloy spool files."
         ),
     ),
     RunbookChunk(
         chunk_id="rb-db-001",
         title="Critical Database & Core Infrastructure Outage Runbook",
-        source="docs/deployment/central-infrastructure.md#critical-db-outage",
+        source="runbooks/linux-vm.md#critical-outage",
+        domain="vm",
         os_type="any",
-        service_tags=["postgres", "database", "prometheus", "gateway"],
-        alert_keywords=["postgresinstancedown", "databaseservicedown", "outage", "down", "critical"],
+        service_tags=["postgres", "database", "amp", "alloy", "ssm"],
+        alert_keywords=["postgresinstancedown", "databaseservicedown", "vmhostdown", "hostdown", "alloy_down", "outage", "down", "critical"],
         action_id=None,
         content=(
-            "1. CRITICAL POLICY: Automated remediation is STRICTLY FORBIDDEN for database or core stack outages.\n"
-            "2. Execute read-only diagnostics (`query_prometheus`, `get_server_context`) only.\n"
-            "3. Page administrator immediately via Telegram with read-only RCA evidence and follow Gate T12 recovery."
+            "1. CRITICAL POLICY: Automated remediation is STRICTLY FORBIDDEN for database, host, or Grafana Alloy outages.\n"
+            "2. Execute read-only diagnostics (`query_domain_metrics`, `get_server_context`) only.\n"
+            "3. Page administrator immediately via Telegram with read-only RCA evidence and verify AWS SSM / Neon PostgreSQL health."
         ),
     ),
 )
@@ -109,16 +132,47 @@ DEFAULT_RUNBOOK_CHUNKS: tuple[RunbookChunk, ...] = (
 class RunbookRAGPipeline:
     """Local-first hybrid RAG pipeline for grounding SaSa AI in InfraPulse runbooks."""
 
-    def __init__(self, chunks: list[RunbookChunk] | None = None) -> None:
-        self.chunks: list[RunbookChunk] = list(chunks) if chunks is not None else list(DEFAULT_RUNBOOK_CHUNKS)
+    def __init__(
+        self,
+        chunks: list[RunbookChunk] | None = None,
+        *,
+        runbooks_dir: Path | None = None,
+    ) -> None:
+        self.chunks: list[RunbookChunk] = (
+            list(chunks) if chunks is not None else list(DEFAULT_RUNBOOK_CHUNKS)
+        )
+        self._seen_keys: set[tuple[str, str]] = {
+            (c.source.lower(), c.title.lower()) for c in self.chunks
+        }
         self._doc_tokens: dict[str, Counter[str]] = {}
         self._idf: dict[str, float] = {}
+
+        if chunks is None:
+            target_dir = runbooks_dir if runbooks_dir is not None else DEFAULT_RUNBOOKS_DIR
+            self.load_runbooks_directory(target_dir)
+        elif runbooks_dir is not None:
+            self.load_runbooks_directory(runbooks_dir)
+
         self._rebuild_index()
 
     @staticmethod
     def tokenize(text: str) -> list[str]:
         """Extract normalized lowercase alphanumeric tokens."""
         return _WORD_RE.findall(text.lower())
+
+    @staticmethod
+    def _infer_file_defaults(file_path: Path) -> tuple[str, str, list[str]]:
+        """Infer `(domain, os_type, service_tags)` from a runbook filename."""
+        stem = file_path.stem.lower()
+        if "ssl" in stem or "cert" in stem:
+            return "ssl", "any", ["ssl", "tls", "x509", "https", "certificate"]
+        if "docker" in stem or "container" in stem:
+            return "container", "any", ["docker", "container", "cadvisor", "runtime"]
+        if "windows" in stem:
+            return "vm", "windows", ["windows", "vm", "alloy", "ssm"]
+        if "linux" in stem:
+            return "vm", "linux", ["linux", "vm", "alloy", "ssm"]
+        return "vm", "any", [stem]
 
     def _rebuild_index(self) -> None:
         """Build TF-IDF statistics across all registered runbook chunks."""
@@ -130,6 +184,7 @@ class RunbookRAGPipeline:
             combined = " ".join(
                 [
                     chunk.title,
+                    chunk.domain,
                     " ".join(chunk.alert_keywords),
                     " ".join(chunk.service_tags),
                     chunk.os_type,
@@ -146,39 +201,111 @@ class RunbookRAGPipeline:
             for term, count in df.items()
         }
 
+    def load_runbooks_directory(self, runbooks_dir: Path) -> list[RunbookChunk]:
+        """Auto-load all `*.md` runbook files from `runbooks_dir`, skipping duplicates."""
+        if not runbooks_dir.is_dir():
+            return []
+
+        added: list[RunbookChunk] = []
+        for md_file in sorted(runbooks_dir.glob("*.md")):
+            if not md_file.is_file():
+                continue
+            domain, os_type, service_tags = self._infer_file_defaults(md_file)
+            text = md_file.read_text(encoding="utf-8")
+            added.extend(
+                self.ingest_markdown_text(
+                    text,
+                    source=f"runbooks/{md_file.name}",
+                    os_type=os_type,
+                    domain=domain,
+                    service_tags=service_tags,
+                    _rebuild=False,
+                )
+            )
+        if added:
+            self._rebuild_index()
+        return added
+
     def ingest_markdown_text(
         self,
         markdown_text: str,
         *,
         source: str = "custom-runbook.md",
         os_type: str = "any",
+        domain: str = "vm",
+        service_tags: list[str] | None = None,
+        _rebuild: bool = True,
     ) -> list[RunbookChunk]:
         """Chunk a Markdown document by `##` / `###` headings and index the resulting segments."""
         added: list[RunbookChunk] = []
         sections = re.split(r"(?m)^(#{2,3}\s+.+)$", markdown_text)
-        current_title = Path(source).stem
+        stem = Path(source).stem
+        current_title: str | None = None
         seq = len(self.chunks) + 1
+        base_tags = list(service_tags) if service_tags else []
 
         for part in sections:
             stripped = part.strip()
             if not stripped:
                 continue
-            if stripped.startswith("#"):
+            if stripped.startswith("##"):
                 current_title = stripped.lstrip("#").strip()
                 continue
+            if current_title is None:
+                # Skip top-level `# Title` preamble before the first `##` section unless there are no sections
+                if stripped.startswith("#") and "## " in markdown_text:
+                    continue
+                current_title = stem
+
+            dedup_key = (source.lower(), current_title.lower())
+            if dedup_key in self._seen_keys:
+                continue
+
+            # Parse optional inline metadata markers from curated runbooks
+            sec_domain = domain
+            dom_match = _DOMAIN_RE.search(stripped)
+            if dom_match:
+                sec_domain = dom_match.group(1).strip().lower()
+
+            sec_os = os_type
+            os_match = _OS_RE.search(stripped)
+            if os_match:
+                sec_os = os_match.group(1).strip().lower()
+
+            action_id: str | None = None
+            act_match = _ACTION_RE.search(stripped)
+            if act_match:
+                raw_action = act_match.group(1).strip()
+                if raw_action and raw_action.lower() not in {"none", "manual-review"}:
+                    action_id = raw_action
+
+            keywords = self.tokenize(current_title)[:8]
+            sig_match = _SIGNALS_RE.search(stripped)
+            if sig_match:
+                sig_tokens = re.findall(r"`([^`]+)`", sig_match.group(1))
+                for tok in sig_tokens:
+                    norm = tok.strip().lower()
+                    if norm and norm not in keywords:
+                        keywords.append(norm)
+
             chunk = RunbookChunk(
-                chunk_id=f"rb-custom-{seq:03d}",
+                chunk_id=f"rb-{stem}-{seq:03d}",
                 title=current_title,
                 source=source,
-                os_type=os_type,
-                alert_keywords=self.tokenize(current_title)[:8],
-                content=stripped[:1500],
+                domain=sec_domain,
+                os_type=sec_os,
+                service_tags=list(base_tags),
+                alert_keywords=keywords,
+                content=stripped[:2000],
+                action_id=action_id,
             )
             self.chunks.append(chunk)
+            self._seen_keys.add(dedup_key)
             added.append(chunk)
             seq += 1
 
-        self._rebuild_index()
+        if _rebuild and added:
+            self._rebuild_index()
         return added
 
     def retrieve(
@@ -187,12 +314,17 @@ class RunbookRAGPipeline:
         *,
         os_type: str | None = None,
         service: str | None = None,
+        domain: str | None = None,
         top_k: int = 2,
     ) -> list[RunbookRetrievalResult]:
         """Retrieve and rerank the top-K most relevant runbook chunks for `query`."""
         query_tokens = Counter(self.tokenize(query))
         if not query_tokens:
             return []
+
+        norm_os = os_type.lower().strip() if os_type else None
+        norm_service = service.lower().strip() if service else None
+        norm_domain = domain.lower().strip() if domain else None
 
         results: list[RunbookRetrievalResult] = []
         query_norm = math.sqrt(
@@ -217,16 +349,30 @@ class RunbookRAGPipeline:
             ) or 1.0
             cosine = dot / (query_norm * doc_norm)
 
-            # Metadata reranking boosts for exact alert keyword, OS, and service match
+            # Metadata reranking boosts for exact alert keyword, domain, OS, and service match
             boost = 0.0
             q_lower = query.lower()
+            kw_matches = 0
             for kw in chunk.alert_keywords:
                 if kw.lower() in q_lower:
+                    kw_matches += 1
+            if kw_matches:
+                boost += min(0.45, kw_matches * 0.22)
+
+            if norm_domain:
+                if chunk.domain.lower() == norm_domain:
                     boost += 0.25
-            if os_type and chunk.os_type in {os_type.lower(), "any"}:
-                boost += 0.05
-            if service and service.lower() in {s.lower() for s in chunk.service_tags}:
-                boost += 0.15
+                elif norm_domain in {"linux", "windows"} and chunk.os_type.lower() == norm_domain:
+                    boost += 0.25
+
+            if norm_os:
+                if chunk.os_type.lower() == norm_os:
+                    boost += 0.15
+                elif chunk.os_type.lower() == "any":
+                    boost += 0.03
+
+            if norm_service and norm_service in {s.lower() for s in chunk.service_tags}:
+                boost += 0.20
 
             total_score = round(min(1.0, cosine + boost), 4)
             if total_score > 0.05:
@@ -238,7 +384,7 @@ class RunbookRAGPipeline:
                     )
                 )
 
-        results.sort(key=lambda r: r.score, reverse=True)
+        results.sort(key=lambda r: (r.score, len(r.matched_terms)), reverse=True)
         return results[: max(1, top_k)]
 
     @staticmethod
@@ -251,7 +397,7 @@ class RunbookRAGPipeline:
         for idx, item in enumerate(results, start=1):
             c = item.chunk
             blocks.append(
-                f"[{idx}] Runbook: {c.title} (id={c.chunk_id}, source={c.source}, "
+                f"[{idx}] Runbook: {c.title} (id={c.chunk_id}, domain={c.domain}, source={c.source}, "
                 f"relevance={item.score}, recommended_action={c.action_id or 'manual-review'})\n"
                 f"{c.content}"
             )
