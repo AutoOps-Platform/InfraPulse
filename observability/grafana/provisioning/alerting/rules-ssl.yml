@@ -1,0 +1,231 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: infrapulse-ssl
+    folder: InfraPulse Alerts
+    interval: 1m
+    rules:
+      - uid: infrapulse-ssl-cert-expired
+        title: SSLCertExpired
+        condition: C
+        for: 1m
+        noDataState: OK
+        execErrState: Error
+        isPaused: false
+        labels:
+          severity: critical
+          domain: ssl
+          source_system: infrapulse
+        annotations:
+          summary: "SSL certificate expired for {{ $labels.endpoint }}{{ $labels.filepath }} ({{ $labels.subject_CN }})"
+          description: "SSL certificate (subject_CN={{ $labels.subject_CN }}, source={{ $labels.source }}, media={{ $labels.media }}) has expired ({{ printf \"%.1f\" $values.B.Value }} days remaining)."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: infrapulse-amp
+            model:
+              editorMode: code
+              expr: (x509_cert_not_after - time()) / 86400
+              instant: false
+              range: true
+              intervalMs: 60000
+              maxDataPoints: 43200
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              settings:
+                mode: dropNN
+              refId: B
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - B
+                  reducer:
+                    type: last
+              refId: C
+
+      - uid: infrapulse-ssl-cert-expiring-critical
+        title: SSLCertExpiringCritical
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        isPaused: false
+        labels:
+          severity: critical
+          domain: ssl
+          source_system: infrapulse
+        annotations:
+          summary: "SSL certificate expiring in < 7 days for {{ $labels.endpoint }}{{ $labels.filepath }} ({{ $labels.subject_CN }})"
+          description: "SSL certificate (subject_CN={{ $labels.subject_CN }}, source={{ $labels.source }}, media={{ $labels.media }}) expires in {{ printf \"%.1f\" $values.B.Value }} days (critical threshold < 7 days)."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: infrapulse-amp
+            model:
+              editorMode: code
+              expr: (x509_cert_not_after - time()) / 86400
+              instant: false
+              range: true
+              intervalMs: 60000
+              maxDataPoints: 43200
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              settings:
+                mode: dropNN
+              refId: B
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: math
+              expression: "$B >= 0 && $B < 7"
+              refId: C
+
+      - uid: infrapulse-ssl-cert-expiring-warning
+        title: SSLCertExpiringWarning
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        isPaused: false
+        labels:
+          severity: warning
+          domain: ssl
+          source_system: infrapulse
+        annotations:
+          summary: "SSL certificate expiring in < 28 days for {{ $labels.endpoint }}{{ $labels.filepath }} ({{ $labels.subject_CN }})"
+          description: "SSL certificate (subject_CN={{ $labels.subject_CN }}, source={{ $labels.source }}, media={{ $labels.media }}) expires in {{ printf \"%.1f\" $values.B.Value }} days (warning threshold < 28 days)."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: infrapulse-amp
+            model:
+              editorMode: code
+              expr: (x509_cert_not_after - time()) / 86400
+              instant: false
+              range: true
+              intervalMs: 60000
+              maxDataPoints: 43200
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              settings:
+                mode: dropNN
+              refId: B
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: math
+              expression: "$B >= 7 && $B < 28"
+              refId: C
+
+      - uid: infrapulse-ssl-probe-or-read-error
+        title: SSLProbeOrReadError
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        isPaused: false
+        labels:
+          severity: warning
+          domain: ssl
+          source_system: infrapulse
+        annotations:
+          summary: "SSL probe or certificate read error on {{ $labels.endpoint }}{{ $labels.server_id }}"
+          description: "x509_read_errors reported {{ printf \"%.0f\" $values.B.Value }} error(s) (source={{ $labels.source }}, instance={{ $labels.instance }})."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: infrapulse-amp
+            model:
+              editorMode: code
+              expr: x509_read_errors
+              instant: false
+              range: true
+              intervalMs: 60000
+              maxDataPoints: 43200
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              settings:
+                mode: dropNN
+              refId: B
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - B
+                  reducer:
+                    type: last
+              refId: C

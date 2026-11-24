@@ -1,0 +1,508 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: infrapulse-vm-availability
+    folder: InfraPulse Alerts
+    interval: 1m
+    rules:
+      - uid: infrapulse-vm-host-down
+        title: VMHostDown
+        condition: C
+        for: 2m
+        noDataState: OK
+        execErrState: Error
+        isPaused: false
+        labels:
+          severity: critical
+          domain: vm
+          source_system: infrapulse
+        annotations:
+          summary: "VM host {{ $labels.server_id }} ({{ $labels.platform }}) is down"
+          description: "Prometheus scrape target up == 0 for server {{ $labels.server_id }} (managed_node_id={{ $labels.managed_node_id }}, platform={{ $labels.platform }}) for more than 2 minutes."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: infrapulse-amp
+            model:
+              editorMode: code
+              expr: min by (server_id, managed_node_id, platform) (up)
+              instant: false
+              range: true
+              intervalMs: 60000
+              maxDataPoints: 43200
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              settings:
+                mode: dropNN
+              refId: B
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: math
+              expression: "$B == 0"
+              refId: C
+
+  - orgId: 1
+    name: infrapulse-vm-linux
+    folder: InfraPulse Alerts
+    interval: 1m
+    rules:
+      - uid: infrapulse-linux-cpu-high
+        title: LinuxCPUHigh
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        isPaused: false
+        labels:
+          severity: warning
+          domain: vm
+          platform: linux
+          source_system: infrapulse
+        annotations:
+          summary: "High CPU usage on Linux VM {{ $labels.server_id }}"
+          description: "Linux VM {{ $labels.server_id }} CPU utilization exceeded 85% (current: {{ printf \"%.1f\" $values.B.Value }}%) over the last 5 minutes."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: infrapulse-amp
+            model:
+              editorMode: code
+              expr: 100 - avg by (server_id, managed_node_id, platform) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100
+              instant: false
+              range: true
+              intervalMs: 60000
+              maxDataPoints: 43200
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              settings:
+                mode: dropNN
+              refId: B
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    params:
+                      - 85
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - B
+                  reducer:
+                    type: last
+              refId: C
+
+      - uid: infrapulse-linux-memory-high
+        title: LinuxMemoryHigh
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        isPaused: false
+        labels:
+          severity: warning
+          domain: vm
+          platform: linux
+          source_system: infrapulse
+        annotations:
+          summary: "High memory usage on Linux VM {{ $labels.server_id }}"
+          description: "Linux VM {{ $labels.server_id }} memory utilization exceeded 85% (current: {{ printf \"%.1f\" $values.B.Value }}%)."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: infrapulse-amp
+            model:
+              editorMode: code
+              expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100
+              instant: false
+              range: true
+              intervalMs: 60000
+              maxDataPoints: 43200
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              settings:
+                mode: dropNN
+              refId: B
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    params:
+                      - 85
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - B
+                  reducer:
+                    type: last
+              refId: C
+
+      - uid: infrapulse-linux-memory-critical
+        title: LinuxMemoryCritical
+        condition: C
+        for: 3m
+        noDataState: OK
+        execErrState: Error
+        isPaused: false
+        labels:
+          severity: critical
+          domain: vm
+          platform: linux
+          source_system: infrapulse
+        annotations:
+          summary: "Critical memory usage on Linux VM {{ $labels.server_id }}"
+          description: "Linux VM {{ $labels.server_id }} memory utilization exceeded 95% (current: {{ printf \"%.1f\" $values.B.Value }}%). Immediate OOM risk."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: infrapulse-amp
+            model:
+              editorMode: code
+              expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100
+              instant: false
+              range: true
+              intervalMs: 60000
+              maxDataPoints: 43200
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              settings:
+                mode: dropNN
+              refId: B
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    params:
+                      - 95
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - B
+                  reducer:
+                    type: last
+              refId: C
+
+      - uid: infrapulse-linux-disk-low
+        title: LinuxDiskLow
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        isPaused: false
+        labels:
+          severity: warning
+          domain: vm
+          platform: linux
+          source_system: infrapulse
+        annotations:
+          summary: "Low disk space on Linux VM {{ $labels.server_id }} ({{ $labels.mountpoint }})"
+          description: "Filesystem {{ $labels.mountpoint }} on Linux VM {{ $labels.server_id }} has less than 15% free space remaining (current: {{ printf \"%.1f\" $values.B.Value }}%)."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: infrapulse-amp
+            model:
+              editorMode: code
+              expr: (node_filesystem_avail_bytes{fstype!="rootfs"} / (node_filesystem_size_bytes{fstype!="rootfs"} > 0)) * 100
+              instant: false
+              range: true
+              intervalMs: 60000
+              maxDataPoints: 43200
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              settings:
+                mode: dropNN
+              refId: B
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    params:
+                      - 15
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - B
+                  reducer:
+                    type: last
+              refId: C
+
+  - orgId: 1
+    name: infrapulse-vm-windows
+    folder: InfraPulse Alerts
+    interval: 1m
+    rules:
+      - uid: infrapulse-windows-cpu-high
+        title: WindowsCPUHigh
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        isPaused: false
+        labels:
+          severity: warning
+          domain: vm
+          platform: windows
+          source_system: infrapulse
+        annotations:
+          summary: "High CPU usage on Windows VM {{ $labels.server_id }}"
+          description: "Windows VM {{ $labels.server_id }} CPU utilization exceeded 85% (current: {{ printf \"%.1f\" $values.B.Value }}%) over the last 5 minutes."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: infrapulse-amp
+            model:
+              editorMode: code
+              expr: 100 - avg by (server_id, managed_node_id, platform) (rate(windows_cpu_time_total{mode="idle"}[5m])) * 100
+              instant: false
+              range: true
+              intervalMs: 60000
+              maxDataPoints: 43200
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              settings:
+                mode: dropNN
+              refId: B
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    params:
+                      - 85
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - B
+                  reducer:
+                    type: last
+              refId: C
+
+      - uid: infrapulse-windows-memory-high
+        title: WindowsMemoryHigh
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        isPaused: false
+        labels:
+          severity: warning
+          domain: vm
+          platform: windows
+          source_system: infrapulse
+        annotations:
+          summary: "High memory usage on Windows VM {{ $labels.server_id }}"
+          description: "Windows VM {{ $labels.server_id }} memory utilization exceeded 85% (current: {{ printf \"%.1f\" $values.B.Value }}%)."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: infrapulse-amp
+            model:
+              editorMode: code
+              expr: (1 - windows_memory_available_bytes / windows_cs_physical_memory_bytes) * 100
+              instant: false
+              range: true
+              intervalMs: 60000
+              maxDataPoints: 43200
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              settings:
+                mode: dropNN
+              refId: B
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    params:
+                      - 85
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - B
+                  reducer:
+                    type: last
+              refId: C
+
+      - uid: infrapulse-windows-disk-low
+        title: WindowsDiskLow
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        isPaused: false
+        labels:
+          severity: warning
+          domain: vm
+          platform: windows
+          source_system: infrapulse
+        annotations:
+          summary: "Low disk space on Windows VM {{ $labels.server_id }} ({{ $labels.volume }})"
+          description: "Logical volume {{ $labels.volume }} on Windows VM {{ $labels.server_id }} has less than 15% free space remaining (current: {{ printf \"%.1f\" $values.B.Value }}%)."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: infrapulse-amp
+            model:
+              editorMode: code
+              expr: (windows_logical_disk_free_bytes / (windows_logical_disk_size_bytes > 0)) * 100
+              instant: false
+              range: true
+              intervalMs: 60000
+              maxDataPoints: 43200
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              settings:
+                mode: dropNN
+              refId: B
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    params:
+                      - 15
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - B
+                  reducer:
+                    type: last
+              refId: C

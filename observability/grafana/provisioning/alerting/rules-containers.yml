@@ -1,0 +1,207 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: infrapulse-containers
+    folder: InfraPulse Alerts
+    interval: 1m
+    rules:
+      - uid: infrapulse-container-stopped
+        title: ContainerStopped
+        condition: C
+        for: 2m
+        noDataState: OK
+        execErrState: Error
+        isPaused: false
+        labels:
+          severity: critical
+          domain: container
+          source_system: infrapulse
+        annotations:
+          summary: "Container {{ $labels.container }} stopped on VM {{ $labels.server_id }}"
+          description: "Docker container {{ $labels.container }} on VM {{ $labels.server_id }} (platform={{ $labels.platform }}) has infrapulse_container_running == 0 for more than 2 minutes."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: infrapulse-amp
+            model:
+              editorMode: code
+              expr: infrapulse_container_running
+              instant: false
+              range: true
+              intervalMs: 60000
+              maxDataPoints: 43200
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              settings:
+                mode: dropNN
+              refId: B
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: math
+              expression: "$B == 0"
+              refId: C
+
+      - uid: infrapulse-container-unhealthy
+        title: ContainerUnhealthy
+        condition: C
+        for: 2m
+        noDataState: OK
+        execErrState: Error
+        isPaused: false
+        labels:
+          severity: warning
+          domain: container
+          source_system: infrapulse
+        annotations:
+          summary: "Container {{ $labels.container }} is unhealthy on VM {{ $labels.server_id }}"
+          description: "Docker container {{ $labels.container }} on VM {{ $labels.server_id }} reported unhealthy healthcheck status (infrapulse_container_health_code == 2) for more than 2 minutes."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: infrapulse-amp
+            model:
+              editorMode: code
+              expr: infrapulse_container_health_code
+              instant: false
+              range: true
+              intervalMs: 60000
+              maxDataPoints: 43200
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              settings:
+                mode: dropNN
+              refId: B
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: math
+              expression: "$B == 2"
+              refId: C
+
+      - uid: infrapulse-container-oom-killed
+        title: ContainerOOMKilled
+        condition: C
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        isPaused: false
+        labels:
+          severity: critical
+          domain: container
+          source_system: infrapulse
+        annotations:
+          summary: "Container {{ $labels.container }} was OOMKilled on VM {{ $labels.server_id }}"
+          description: "Docker container {{ $labels.container }} on VM {{ $labels.server_id }} was terminated by the kernel OOM killer (infrapulse_container_oom_killed == 1)."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: infrapulse-amp
+            model:
+              editorMode: code
+              expr: infrapulse_container_oom_killed
+              instant: false
+              range: true
+              intervalMs: 60000
+              maxDataPoints: 43200
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              settings:
+                mode: dropNN
+              refId: B
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: math
+              expression: "$B == 1"
+              refId: C
+
+      - uid: infrapulse-container-restart-loop
+        title: ContainerRestartLoop
+        condition: C
+        for: 2m
+        noDataState: OK
+        execErrState: Error
+        isPaused: false
+        labels:
+          severity: warning
+          domain: container
+          source_system: infrapulse
+        annotations:
+          summary: "Container {{ $labels.container }} is in a restart loop on VM {{ $labels.server_id }}"
+          description: "Docker container {{ $labels.container }} on VM {{ $labels.server_id }} restarted {{ printf \"%.0f\" $values.B.Value }} times in the last 15 minutes (threshold >= 3)."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: infrapulse-amp
+            model:
+              editorMode: code
+              expr: increase(infrapulse_container_restarts_total[15m])
+              instant: false
+              range: true
+              intervalMs: 60000
+              maxDataPoints: 43200
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              settings:
+                mode: dropNN
+              refId: B
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: math
+              expression: "$B >= 3"
+              refId: C
